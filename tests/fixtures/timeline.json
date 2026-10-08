@@ -1,0 +1,115 @@
+[
+  {
+    "date": 1791324000000,
+    "type": "journal",
+    "children": [
+      {
+        "id": "c0ffee00c0ffee00c0ffee00c0ffee00",
+        "firstName": "Sam",
+        "middleName": null,
+        "lastName": "Test",
+        "hasActivePlacements": true,
+        "avatar": null,
+        "avatars": null,
+        "childGroup": null,
+        "dateOfBirth": 1778882400000
+      }
+    ],
+    "journal": {
+      "date": 1791324000000,
+      "writtenByName": "Juf",
+      "writtenByType": "timeline.card_journal_header_type.employees_of",
+      "content": "<table class='day-rythm-moment'><tr><td class='day-rythm-icon-journal-cell'><div class='icon dagritme-flesje day-rythm-journal-icon' aria-hidden='true'></div></td><td class='day-rythm-moment-journal-cell'><div class='moment-title'><span class='moment-title-span'>09:00 (Fles)voeding</span></div><div class='moment-entry-description'>130 cc (Fles)voeding </div><div class='moment-remarks'>20cc over </div></td></tr></table><table class='day-rythm-moment'><tr><td class='day-rythm-icon-journal-cell'><div class='icon dagritme-slapen-bedje day-rythm-journal-icon' aria-hidden='true'></div></td><td class='day-rythm-moment-journal-cell'><div class='moment-title'><span class='moment-title-span'>10:10 - 10:48 Slapen</span><span class='moment-subtitle'>(38 minutes)</span></div><div class='moment-entry-description'></div><div class='moment-remarks'></div></td></tr></table><table class='day-rythm-moment'><tr><td class='day-rythm-icon-journal-cell'><div class='icon dagritme-flesje day-rythm-journal-icon' aria-hidden='true'></div></td><td class='day-rythm-moment-journal-cell'><div class='moment-title'><span class='moment-title-span'>12:00 (Fles)voeding</span></div><div class='moment-entry-description'>140 cc (Fles)voeding </div><div class='moment-remarks'></div></td></tr></table>",
+      "dayRythmContent": "<table class='day-rythm-moment'><tr><td class='day-rythm-icon-journal-cell'><div class='icon dagritme-flesje day-rythm-journal-icon' aria-hidden='true'></div></td><td class='day-rythm-moment-journal-cell'><div class='moment-title'><span class='moment-title-span'>09:00 (Fles)voeding</span></div><div class='moment-entry-description'>130 cc (Fles)voeding </div><div class='moment-remarks'>20cc over </div></td></tr></table><table class='day-rythm-moment'><tr><td class='day-rythm-icon-journal-cell'><div class='icon dagritme-slapen-bedje day-rythm-journal-icon' aria-hidden='true'></div></td><td class='day-rythm-moment-journal-cell'><div class='moment-title'><span class='moment-title-span'>10:10 - 10:48 Slapen</span><span class='moment-subtitle'>(38 minutes)</span></div><div class='moment-entry-description'></div><div class='moment-remarks'></div></td></tr></table><table class='day-rythm-moment'><tr><td class='day-rythm-icon-journal-cell'><div class='icon dagritme-flesje day-rythm-journal-icon' aria-hidden='true'></div></td><td class='day-rythm-moment-journal-cell'><div class='moment-title'><span class='moment-title-span'>12:00 (Fles)voeding</span></div><div class='moment-entry-description'>140 cc (Fles)voeding </div><div class='moment-remarks'></div></td></tr></table>",
+      "journalContent": "",
+      "journalId": "j1",
+      "childId": "c0ffee00c0ffee00c0ffee00c0ffee00",
+      "photos": [],
+      "attachmentContentItems": [],
+      "isNew": false,
+      "edited": false
+    }
+  },
+  {
+    "date": 1791324000000,
+    "type": "photo",
+    "children": [
+      {
+        "id": "c0ffee00c0ffee00c0ffee00c0ffee00",
+        "firstName": "Sam",
+        "middleName": null,
+        "lastName": "Test",
+        "hasActivePlacements": true,
+        "avatar": null,
+        "avatars": null,
+        "childGroup": null,
+        "dateOfBirth": 1778882400000
+      }
+    ],
+    "photos": [
+      {
+        "id": "photo3",
+        "description": "In this photo is Sam",
+        "generatedDescription": true,
+        "date": 1791324000000,
+        "childTags": [
+          {
+            "personId": "c0ffee00c0ffee00c0ffee00c0ffee00",
+            "message": "Sam",
+            "ownChild": true
+          }
+        ],
+        "employeeTags": [],
+        "miscTags": [],
+        "mediaType": "photo",
+        "liked": false,
+        "fullSizeUrl": "https://resource.kidskonnect.cloud/test/IMG-3.jpeg?Expires=1&Key-Pair-Id=TEST&Signature=test",
+        "mediumUrl": "https://resource.kidskonnect.cloud/test/IMG-3-medium.jpeg?Expires=1&Key-Pair-Id=TEST&Signature=test",
+        "thumbUrl": "https://resource.kidskonnect.cloud/test/IMG-3-thumb.jpeg?Expires=1&Key-Pair-Id=TEST&Signature=test",
+        "new": false
+      },
+      {
+        "id": "photo2",
+        "description": "In this photo is Sam",
+        "generatedDescription": true,
+        "date": 1791324000000,
+        "childTags": [
+          {
+            "personId": "c0ffee00c0ffee00c0ffee00c0ffee00",
+            "message": "Sam",
+            "ownChild": true
+          }
+        ],
+        "employeeTags": [],
+        "miscTags": [],
+        "mediaType": "photo",
+        "liked": false,
+        "fullSizeUrl": "https://resource.kidskonnect.cloud/test/IMG-2.jpeg?Expires=1&Key-Pair-Id=TEST&Signature=test",
+        "mediumUrl": "https://resource.kidskonnect.cloud/test/IMG-2-medium.jpeg?Expires=1&Key-Pair-Id=TEST&Signature=test",
+        "thumbUrl": "https://resource.kidskonnect.cloud/test/IMG-2-thumb.jpeg?Expires=1&Key-Pair-Id=TEST&Signature=test",
+        "new": false
+      },
+      {
+        "id": "photo1",
+        "description": "In this photo is Sam",
+        "generatedDescription": true,
+        "date": 1791324000000,
+        "childTags": [
+          {
+            "personId": "c0ffee00c0ffee00c0ffee00c0ffee00",
+            "message": "Sam",
+            "ownChild": true
+          }
+        ],
+        "employeeTags": [],
+        "miscTags": [],
+        "mediaType": "photo",
+        "liked": false,
+        "fullSizeUrl": "https://resource.kidskonnect.cloud/test/IMG-1.jpeg?Expires=1&Key-Pair-Id=TEST&Signature=test",
+        "mediumUrl": "https://resource.kidskonnect.cloud/test/IMG-1-medium.jpeg?Expires=1&Key-Pair-Id=TEST&Signature=test",
+        "thumbUrl": "https://resource.kidskonnect.cloud/test/IMG-1-thumb.jpeg?Expires=1&Key-Pair-Id=TEST&Signature=test",
+        "new": false
+      }
+    ]
+  }
+]

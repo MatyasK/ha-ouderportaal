@@ -1,0 +1,52 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to your ouderportaal",
+        "description": "Use the same details you use to log in on the website.",
+        "data": {
+          "portal": "Portal",
+          "username": "Email address",
+          "password": "Password"
+        },
+        "data_description": {
+          "portal": "The part before .ouderportaal.nl, for example 'mijnopvang'. You can also paste the full website address."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Log in again",
+        "description": "The password for {username} on {portal}.ouderportaal.nl no longer works.",
+        "data": {
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_portal": "That doesn't look like an ouderportaal address.",
+      "invalid_auth": "The email address or password is incorrect.",
+      "cannot_connect": "Could not reach the portal.",
+      "no_children": "No children were found on this account.",
+      "unknown": "Unexpected error, see the logs."
+    },
+    "abort": {
+      "already_configured": "This account is already set up.",
+      "reauth_successful": "Logged in again."
+    }
+  },
+  "entity": {
+    "calendar": {
+      "day_rhythm": { "name": "Day rhythm" }
+    },
+    "image": {
+      "latest_photo": { "name": "Latest photo" }
+    },
+    "sensor": {
+      "last_activity": { "name": "Last activity" },
+      "last_bottle": { "name": "Last bottle" },
+      "last_diaper": { "name": "Last diaper" },
+      "last_sleep": { "name": "Last sleep" },
+      "milk_today": { "name": "Milk today" },
+      "sleep_today": { "name": "Sleep today" }
+    }
+  }
+}

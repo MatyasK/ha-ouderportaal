@@ -1,0 +1,12 @@
+{
+  "domain": "ouderportaal",
+  "name": "Ouderportaal (Konnect)",
+  "codeowners": ["@MatyasK"],
+  "config_flow": true,
+  "documentation": "https://github.com/MatyasK/ha-ouderportaal",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/MatyasK/ha-ouderportaal/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

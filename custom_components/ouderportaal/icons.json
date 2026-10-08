@@ -1,0 +1,18 @@
+{
+  "entity": {
+    "calendar": {
+      "day_rhythm": { "default": "mdi:calendar-clock" }
+    },
+    "image": {
+      "latest_photo": { "default": "mdi:image-multiple" }
+    },
+    "sensor": {
+      "last_activity": { "default": "mdi:baby-face-outline" },
+      "last_bottle": { "default": "mdi:baby-bottle-outline" },
+      "last_diaper": { "default": "mdi:human-baby-changing-table" },
+      "last_sleep": { "default": "mdi:sleep" },
+      "milk_today": { "default": "mdi:baby-bottle" },
+      "sleep_today": { "default": "mdi:power-sleep" }
+    }
+  }
+}

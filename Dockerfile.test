@@ -1,0 +1,7 @@
+# Runs the test suite on Linux (Home Assistant does not run natively on Windows).
+#   docker build -f Dockerfile.test -t ouderportaal-test .
+#   docker run --rm -v "$PWD:/app" ouderportaal-test
+FROM python:3.14-slim
+RUN pip install --no-cache-dir pytest-homeassistant-custom-component ruff
+WORKDIR /app
+CMD ["sh", "-c", "ruff check . && ruff format --check . && pytest -q -p no:cacheprovider"]
