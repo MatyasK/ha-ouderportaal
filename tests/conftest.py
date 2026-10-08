@@ -48,6 +48,10 @@ def mock_client(timeline_cards, children_payload) -> Iterator[SimpleNamespace]:
         login=AsyncMock(),
         get_children=AsyncMock(return_value=children_payload["payload"]["activeChildren"]),
         get_timeline=AsyncMock(side_effect=get_timeline),
+        get_messages=AsyncMock(return_value=load_fixture("messages.json")),
+        get_notifications=AsyncMock(
+            return_value={"nrOfNewMessages": 1, "nrOfNewNewsItems": None, "nrOfNewNewsletters": None}
+        ),
     )
     with (
         patch.multiple(CLIENT, **vars(mocks)),

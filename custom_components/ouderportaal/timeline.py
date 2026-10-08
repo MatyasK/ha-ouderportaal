@@ -1,4 +1,4 @@
-"""Parse timeline cards into moments (day rhythm entries) and photos.
+"""Parse timeline cards into moments (day rhythm entries) and photos, and the mailbox into messages.
 
 Kept free of Home Assistant imports so it can be tested standalone.
 
@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, tzinfo
 from html.parser import HTMLParser
 from pathlib import PurePosixPath
@@ -189,15 +189,62 @@ class Photo:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class Message:
+    """A mailbox conversation as listed in the overview: subject and a preview of the text.
+
+    One conversation keeps its id when replies are added; the preview and date change instead.
+    """
+
+    id: str
+    subject: str
+    preview: str
+    sent: datetime
+    unread: bool
+    child_ids: tuple[str, ...]
+
+    @property
+    def day(self) -> date:
+        return self.sent.date()
+
+    @property
+    def fingerprint(self) -> str:
+        """Changes when a reply arrives; not when it is read, so reading does not trigger notifications."""
+        return _digest(f"{self.sent.isoformat()}|{self.preview}")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "subject": self.subject,
+            "preview": self.preview,
+            "sent": self.sent.isoformat(),
+            "unread": self.unread,
+            "child_ids": list(self.child_ids),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Message:
+        return cls(
+            id=data["id"],
+            subject=data["subject"],
+            preview=data["preview"],
+            sent=datetime.fromisoformat(data["sent"]),
+            unread=data["unread"],
+            child_ids=tuple(data["child_ids"]),
+        )
+
+
 @dataclass(slots=True)
 class Timeline:
     moments: list[Moment]
     photos: list[Photo]
+    messages: list[Message] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "moments": [m.to_dict() for m in self.moments],
             "photos": [p.to_dict() for p in self.photos],
+            "messages": [m.to_dict() for m in self.messages],
         }
 
     @classmethod
@@ -205,6 +252,7 @@ class Timeline:
         return cls(
             moments=[Moment.from_dict(m) for m in data.get("moments", [])],
             photos=[Photo.from_dict(p) for p in data.get("photos", [])],
+            messages=[Message.from_dict(m) for m in data.get("messages", [])],
         )
 
 
@@ -217,10 +265,57 @@ def merge_timelines(history: Timeline, fresh: Timeline, *, since: date | None = 
     moments.update((m.key, m) for m in fresh.moments if since is None or m.day >= since)
     photos = {p.id: p for p in fresh.photos if since is None or p.day >= since}
     photos.update((p.id, p) for p in history.photos if p.id not in photos)
+    messages = {m.id: m for m in history.messages}
+    messages.update((m.id, m) for m in fresh.messages if since is None or m.day >= since)
     return Timeline(
         moments=sorted(moments.values(), key=_moment_sort_key),
         photos=sorted(photos.values(), key=lambda p: p.day, reverse=True),
+        messages=sorted(messages.values(), key=lambda m: m.sent, reverse=True),
     )
+
+
+def _parse_sent(value: Any, tz: tzinfo) -> datetime | None:
+    """The portal sends dates as epoch milliseconds or ISO strings; accept both."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return datetime.fromtimestamp(value / 1000, tz)
+    if isinstance(value, str) and value:
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=tz)
+    return None
+
+
+def parse_messages(items: list[dict[str, Any]], tz: tzinfo) -> list[Message]:
+    """Messages from /logbook/overview, newest first. Items without a usable date are skipped."""
+    messages = []
+    for item in items:
+        if not isinstance(item, dict) or (sent := _parse_sent(item.get("date"), tz)) is None:
+            continue
+        subject = _clean(item.get("subject") or "")
+        # Same fallbacks as the portal's own app.
+        message_id = str(
+            item.get("logMessageMessageId")
+            or item.get("logbookMessageId")
+            or item.get("logMessageId")
+            or item.get("id")
+            or f"{sent.isoformat()}-{subject}"
+        )
+        messages.append(
+            Message(
+                id=message_id,
+                subject=subject,
+                preview=html_to_text(item.get("message") or ""),
+                sent=sent,
+                unread=bool(item.get("unread")),
+                child_ids=tuple(c["id"] for c in item.get("children") or [] if isinstance(c, dict) and c.get("id")),
+            )
+        )
+    messages.sort(key=lambda m: m.sent, reverse=True)
+    return messages
 
 
 def _extension(url: str, media_type: str) -> str:

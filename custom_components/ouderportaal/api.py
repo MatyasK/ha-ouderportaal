@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import re
 import time
+from datetime import date
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -174,3 +175,15 @@ class OuderportaalClient:
         The portal's infinite scroll asks for offset 0, then offset += number of cards received.
         """
         return list(await self._get(f"/timeline/cards/v2/{offset}") or [])
+
+    async def get_messages(self, start: date, end: date) -> list[dict[str, Any]]:
+        """Mailbox conversations dated between start and end, as listed in the overview.
+
+        Only the overview is read: opening a conversation may mark it as read on the portal.
+        """
+        payload = await self._get(f"/logbook/overview?from={start:%Y%m%d}&to={end:%Y%m%d}")
+        return list(payload or [])
+
+    async def get_notifications(self) -> dict[str, Any]:
+        """Unread counts, e.g. {'nrOfNewMessages': 2, 'nrOfNewNewsItems': None, ...}."""
+        return dict(await self._get("/notification/notifications") or {})

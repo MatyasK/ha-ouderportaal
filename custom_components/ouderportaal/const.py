@@ -18,6 +18,9 @@ NIGHT_UPDATE_INTERVAL: Final = timedelta(hours=1)
 
 STORAGE_VERSION: Final = 1
 
+# Each poll lists the mailbox conversations of this many recent days; a reply moves a conversation's date forward.
+MESSAGES_POLL_DAYS: Final = 7
+
 # Photos are saved under <media>/ouderportaal/<date>/.
 ARCHIVE_DIR: Final = "ouderportaal"
 MAX_PARALLEL_DOWNLOADS: Final = 3
@@ -25,7 +28,7 @@ MAX_PARALLEL_DOWNLOADS: Final = 3
 # On first setup, import this much history by paging back through the timeline.
 BACKFILL_DAYS: Final = 30
 BACKFILL_MAX_PAGES: Final = 100
-# Bump to run the import again on existing installs (2: fixed paging, which is by card offset).
-BACKFILL_VERSION: Final = 2
+# Bump to run the import again on existing installs (2: fixed paging, which is by card offset; 3: messages).
+BACKFILL_VERSION: Final = 3
 # Pause between pages, to stay gentle on the portal.
 BACKFILL_PAGE_DELAY_S: Final = 1.0

@@ -2,7 +2,7 @@
 
     uv run --no-project --with aiohttp python scripts/try_portal.py mijnopvang you@example.com
 
-Asks for your password, logs in, forces a token refresh, and prints today's moments.
+Asks for your password, logs in, forces a token refresh, and prints the latest moments and messages.
 Nothing is stored.
 """
 
@@ -13,6 +13,7 @@ import getpass
 import importlib.util
 import sys
 import time
+from datetime import date, timedelta
 from pathlib import Path
 from types import ModuleType
 from zoneinfo import ZoneInfo
@@ -36,7 +37,9 @@ def _load(name: str) -> ModuleType:
 
 
 OuderportaalClient = _load("api").OuderportaalClient
-parse_timeline = _load("timeline").parse_timeline
+_timeline = _load("timeline")
+parse_timeline = _timeline.parse_timeline
+parse_messages = _timeline.parse_messages
 
 
 async def main(portal: str, username: str) -> None:
@@ -62,6 +65,19 @@ async def main(portal: str, username: str) -> None:
         unknown = sorted({m.icon for m in timeline.moments if m.category == "activity"})
         if unknown:
             print(f"   Icons mapped to 'activity': {', '.join(unknown)}")
+
+        today = date.today()
+        items = await client.get_messages(today - timedelta(days=30), today + timedelta(days=1))
+        messages = parse_messages(items, ZoneInfo("Europe/Amsterdam"))
+        print(f"5. Messages, last 30 days: {len(items)} items, {len(messages)} understood")
+        if items:
+            first = items[0]
+            print(f"   Fields: {', '.join(sorted(first))}")
+            print(f"   'date' looks like: {type(first.get('date')).__name__} {first.get('date')!r}")
+        for message in messages:
+            print(f"   {message.sent:%Y-%m-%d %H:%M} {'*' if message.unread else ' '} {message.subject}")
+        counts = await client.get_notifications()
+        print(f"   Unread according to the portal: {counts.get('nrOfNewMessages') or 0}")
 
 
 if __name__ == "__main__":

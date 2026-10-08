@@ -27,10 +27,11 @@ from .const import (
     DAY_UPDATE_INTERVAL,
     DOMAIN,
     EVENT_NEW_ENTRY,
+    MESSAGES_POLL_DAYS,
     NIGHT_UPDATE_INTERVAL,
     STORAGE_VERSION,
 )
-from .timeline import Moment, Photo, Timeline, merge_timelines, parse_timeline
+from .timeline import Message, Moment, Photo, Timeline, merge_timelines, parse_messages, parse_timeline
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -69,8 +70,12 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
         # None until loaded: an empty store means "first run", which must not notify about history.
         self._seen_moments: dict[str, str] | None = None
         self._seen_photos: set[str] = set()
+        self._seen_messages: dict[str, str] | None = None
         self.history = Timeline(moments=[], photos=[])
         self._backfill_version = 0
+        # The portal's own unread count; None until it has been read once.
+        self.unread_messages: int | None = None
+        self._messages_failing = False
 
     async def _async_setup(self) -> None:
         try:
@@ -86,6 +91,8 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
         if stored := await self._seen_store.async_load():
             self._seen_moments = stored.get("moments", {})
             self._seen_photos = set(stored.get("photos", []))
+            # Missing in stores from before messages were supported: then the next poll is a silent baseline.
+            self._seen_messages = stored.get("messages")
         if stored := await self._history_store.async_load():
             self.history = Timeline.from_dict(stored.get("timeline", {}))
             # Stores from before versioning ("backfilled": true) imported nothing: treat them as version 0.
@@ -106,8 +113,41 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
         # An empty answer is more likely a hiccup than a wiped timeline: keep the seen state.
         if timeline.moments or timeline.photos:
             await self._announce(timeline)
+
+        today = dt_util.now().date()
+        messages = await self._fetch_messages(today - timedelta(days=MESSAGES_POLL_DAYS), today + timedelta(days=1))
+        if messages is not None:
+            await self._announce_messages(messages)
+            timeline.messages = messages
+            await self._update_unread()
+
         await self._add_to_history(timeline)
         return self.history
+
+    async def _fetch_messages(self, start: date, end: date) -> list[Message] | None:
+        """Messages are an extra: when they fail, the rest of the update still goes through."""
+        try:
+            items = await self.client.get_messages(start, end)
+        except OuderportaalAuthError as err:
+            raise ConfigEntryAuthFailed(str(err)) from err
+        except OuderportaalError as err:
+            if not self._messages_failing:
+                _LOGGER.warning("Could not read messages, will keep trying: %s", err)
+            self._messages_failing = True
+            return None
+        if self._messages_failing:
+            _LOGGER.info("Reading messages works again")
+        self._messages_failing = False
+        return parse_messages(items, dt_util.get_default_time_zone())
+
+    async def _update_unread(self) -> None:
+        try:
+            counts = await self.client.get_notifications()
+        except OuderportaalError as err:
+            _LOGGER.debug("Could not read the unread count: %s", err)
+            return
+        # The portal sends null instead of 0.
+        self.unread_messages = counts.get("nrOfNewMessages") or 0
 
     async def async_backfill(self) -> None:
         """Import the last BACKFILL_DAYS days once, without announcing them. Runs in the background."""
@@ -115,6 +155,11 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
             return
         since = dt_util.now().date() - timedelta(days=BACKFILL_DAYS)
         tz = dt_util.get_default_time_zone()
+        messages = await self._fetch_messages(since, dt_util.now().date() + timedelta(days=1))
+        if messages is None:
+            _LOGGER.warning("Importing history postponed until messages can be read; will retry after a restart")
+            return
+        await self._add_to_history(Timeline(moments=[], photos=[], messages=messages), since=since)
         offset = 0
         for _ in range(BACKFILL_MAX_PAGES):
             try:
@@ -137,10 +182,11 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
         self._backfill_version = BACKFILL_VERSION
         await self._save_history()
         _LOGGER.info(
-            "Imported history since %s: %s moments, %s photos",
+            "Imported history since %s: %s moments, %s photos, %s messages",
             since,
             len(self.history.moments),
             len(self.history.photos),
+            len(self.history.messages),
         )
 
     async def _add_to_history(self, timeline: Timeline, *, since: date | None = None) -> None:
@@ -177,7 +223,26 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
         if moments == self._seen_moments and photos == self._seen_photos:
             return
         self._seen_moments, self._seen_photos = moments, photos
-        await self._seen_store.async_save({"moments": moments, "photos": sorted(photos)})
+        await self._save_seen()
+
+    async def _announce_messages(self, messages: list[Message]) -> None:
+        if self._seen_messages is not None:
+            known = {m.id for m in self.history.messages}
+            for message in reversed(messages):  # oldest first, like the moments
+                if self._seen_messages.get(message.id) != message.fingerprint:
+                    self._fire_message(message, "updated" if message.id in known else "new")
+        # Only the poll window is tracked; a conversation that comes back into it has a new reply.
+        seen = {m.id: m.fingerprint for m in messages}
+        if seen != self._seen_messages:
+            self._seen_messages = seen
+            await self._save_seen()
+
+    async def _save_seen(self) -> None:
+        data: dict[str, Any] = {"moments": self._seen_moments or {}, "photos": sorted(self._seen_photos)}
+        # Left out until known, so a restart before the first successful read stays a silent baseline.
+        if self._seen_messages is not None:
+            data["messages"] = self._seen_messages
+        await self._seen_store.async_save(data)
 
     def child_name(self, child_id: str) -> str:
         child = self.children.get(child_id)
@@ -203,6 +268,23 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
                 "end": moment.end.isoformat() if moment.end else None,
                 "duration_minutes": moment.duration_minutes,
                 "amount_ml": moment.amount_ml,
+            },
+        )
+
+    def _fire_message(self, message: Message, change: str) -> None:
+        self.hass.bus.async_fire(
+            EVENT_NEW_ENTRY,
+            {
+                "entry_type": "message",
+                "change": change,
+                "message_id": message.id,
+                "child_ids": list(message.child_ids),
+                "child_names": [self.child_name(c) for c in message.child_ids],
+                "subject": message.subject,
+                "preview": message.preview,
+                "sent": message.sent.isoformat(),
+                "unread": message.unread,
+                "url": f"{self.client.base_url}/parent/#/tabs/mailbox",
             },
         )
 

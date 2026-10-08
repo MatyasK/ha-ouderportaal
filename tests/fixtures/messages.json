@@ -1,0 +1,18 @@
+[
+  {
+    "logMessageMessageId": "msg-trip",
+    "subject": "Uitje naar de kinderboerderij",
+    "message": "<p>Morgen gaan we naar de <b>kinderboerderij</b>.</p><p>Graag laarsjes mee!</p>",
+    "date": "2026-10-07T14:30:00",
+    "unread": true,
+    "children": [{"id": "c0ffee00c0ffee00c0ffee00c0ffee00", "firstName": "Sam"}]
+  },
+  {
+    "logMessageMessageId": "msg-closed",
+    "subject": "Sluitingsdag",
+    "message": "Op 24 oktober zijn we gesloten.",
+    "date": 1791196200000,
+    "unread": false,
+    "children": []
+  }
+]

@@ -21,12 +21,24 @@ One device per child, with:
 | `image.<child>_latest_photo` | The newest photo, served from the saved copy |
 | `calendar.<child>_day_rhythm` | The full day rhythm history as calendar events; "on" during an ongoing nap |
 
+### Messages
+
+Messages from the portal's mailbox get their own device, "Ouderportaal mailbox":
+
+| Entity | What it shows |
+|---|---|
+| `sensor.ouderportaal_mailbox_unread_messages` | Unread messages, the same count the portal shows |
+| `sensor.ouderportaal_mailbox_latest_message` | Subject of the newest message, with the preview text as attribute |
+
+Only the message list is read, never the conversations themselves: opening a conversation may mark it as read on the portal, and then you would miss the unread marker in the app.
+So Home Assistant gets the subject and a preview of the latest text; open the portal for the full conversation.
+
 ### Photos and history
 
 Every photo is saved once into Home Assistant's media folder, as `media/ouderportaal/<YYYY-MM-DD>/<photo id>.jpeg`.
 You can browse them under Media > My media, they are included in backups, and they stay even if the daycare removes them from the portal.
 
-On first setup, the integration imports the last 30 days of day rhythm and photos in the background, one timeline page per second.
+On first setup, the integration imports the last 30 days of day rhythm, photos and messages in the background, one timeline page per second.
 After that it keeps everything new.
 
 For a timeline card, the websocket command `ouderportaal/timeline` returns everything per child, newest day first:
@@ -39,7 +51,8 @@ For a timeline card, the websocket command `ouderportaal/timeline` returns every
 {"children": [{"id": "...", "name": "Sam", "days": [
   {"date": "2026-10-07",
    "moments": [{"title": "09:00 (Fles)voeding", "category": "bottle", "amount_ml": 130, "start": "...", "end": null, "remarks": "20cc over", "...": "..."}],
-   "photos": [{"id": "...", "url": "/media/local/ouderportaal/2026-10-07/....jpeg", "saved": true, "description": "...", "media_type": "photo", "media_content_id": "media-source://..."}]}
+   "photos": [{"id": "...", "url": "/media/local/ouderportaal/2026-10-07/....jpeg", "saved": true, "description": "...", "media_type": "photo", "media_content_id": "media-source://..."}],
+   "messages": [{"id": "...", "subject": "...", "preview": "...", "sent": "2026-10-07T14:30:00+02:00", "unread": true, "child_names": ["Sam"], "url": "https://<portal>.ouderportaal.nl/parent/#/tabs/mailbox"}]}
 ]}]}
 ```
 
@@ -48,7 +61,8 @@ Photo `url`s need a logged-in request; in a custom card, sign them first with `h
 And an event, `ouderportaal_new_entry`, fired for:
 
 - every new day rhythm entry (`entry_type: moment`, `change: new`), and when an entry changes, such as a nap getting its end time (`change: updated`);
-- each batch of new photos (`entry_type: photos`), once per batch, not per photo.
+- each batch of new photos (`entry_type: photos`), once per batch, not per photo;
+- every new message (`entry_type: message`, `change: new`), and a reply in an existing conversation (`change: updated`). Reading a message does not trigger anything.
 
 The first time the integration runs it only records what is already there, so you don't get notifications for old entries.
 
@@ -100,12 +114,34 @@ automation:
             image: "{{ trigger.event.data.media_url }}"
 ```
 
+New message, with a button that opens the mailbox:
+
+```yaml
+automation:
+  - alias: Daycare message
+    triggers:
+      - trigger: event
+        event_type: ouderportaal_new_entry
+        event_data:
+          entry_type: message
+    actions:
+      - action: notify.mobile_app_your_phone
+        data:
+          title: "{{ trigger.event.data.subject }}"
+          message: "{{ trigger.event.data.preview }}"
+          data:
+            clickAction: "{{ trigger.event.data.url }}"
+            url: "{{ trigger.event.data.url }}"
+```
+
 `media_url` points at the saved copy, which the companion app loads with your Home Assistant login.
 `image_url` is the portal's own signed URL; it works anywhere but expires after about an hour.
 
 ### Event data
 
 Moments: `child_id`, `child_name`, `change`, `category` (`bottle`, `sleep`, `diaper`, `toilet`, `food`, `drink`, `medication`, `temperature`, `sunscreen`, `note`, `activity`), `icon`, `title`, `text`, `label`, `description`, `remarks`, `date`, `start`, `end`, `duration_minutes`, `amount_ml`.
+
+Messages: `message_id`, `change`, `child_ids`, `child_names`, `subject`, `preview`, `sent`, `unread`, `url`.
 
 Photos: `child_id`, `child_name`, `count`, `media_url`, `image_url`, `photos` (each with `id`, `date`, `description`, `media_type`, `media_url`, `media_content_id`, `full_url`, `medium_url`, `thumb_url`).
 
@@ -122,7 +158,7 @@ Photos: `child_id`, `child_name`, `count`, `media_url`, `image_url`, `photos` (e
 Limitations:
 
 - History before installing goes back 30 days.
-- Messages, newsletters and documents are not included yet.
+- News items, newsletters and documents are not included yet.
 
 ## Development
 
