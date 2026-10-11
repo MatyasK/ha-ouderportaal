@@ -66,10 +66,12 @@ async def ws_timeline(hass: HomeAssistant, connection: websocket_api.ActiveConne
     for entry in hass.config_entries.async_loaded_entries(DOMAIN):
         coordinator: OuderportaalCoordinator = entry.runtime_data
         history = coordinator.history
-        saved = await coordinator.archive.async_saved(history.photos)
-        for child in coordinator.children.values():
-            if msg.get("child_id") not in (None, child.id):
-                continue
+        wanted = [c for c in coordinator.children.values() if msg.get("child_id") in (None, c.id)]
+        wanted_ids = {c.id for c in wanted}
+        # Only these photos are looked up on disk, not every photo ever saved.
+        photos = [p for p in history.photos if p.day >= since and wanted_ids.intersection(p.child_ids)]
+        saved = await coordinator.archive.async_saved(photos)
+        for child in wanted:
             days: dict[str, dict[str, Any]] = {}
 
             def day(iso: str, days: dict[str, dict[str, Any]] = days) -> dict[str, Any]:
@@ -78,8 +80,8 @@ async def ws_timeline(hass: HomeAssistant, connection: websocket_api.ActiveConne
             for moment in history.moments:
                 if moment.child_id == child.id and moment.day >= since:
                     day(moment.day.isoformat())["moments"].append(_moment(moment))
-            for photo in history.photos:
-                if child.id in photo.child_ids and photo.day >= since:
+            for photo in photos:
+                if child.id in photo.child_ids:
                     day(photo.day.isoformat())["photos"].append(_photo(coordinator, photo, saved))
             # Messages without children are for the whole family, so they show for every child.
             for message in history.messages:

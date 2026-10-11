@@ -72,9 +72,11 @@ Only the kinds of item the portal shows your account are read.
 
 Every photo is saved once into Home Assistant's media folder, as `media/ouderportaal/<YYYY-MM-DD>/<photo id>.jpeg`.
 You can browse them under Media > My media, they are included in backups, and they stay even if the daycare removes them from the portal.
+If the media folder cannot be written to, photos are not saved and a warning is logged once; everything else keeps working.
 
 On first setup, the integration imports the last 30 days of day rhythm, photos and messages in the background, one timeline page per second.
 After that it keeps everything new.
+When the daycare corrects or removes a day rhythm entry, the history follows, for as long as that day is on the first page of the portal's timeline.
 
 For a timeline card, the websocket command `ouderportaal/timeline` returns everything per child, newest day first:
 
@@ -96,7 +98,7 @@ News and newsletters are for the whole family, so they show up for every child.
 
 And an event, `ouderportaal_new_entry`, fired for:
 
-- every new day rhythm entry (`entry_type: moment`, `change: new`), and when an entry changes, such as a nap getting its end time (`change: updated`);
+- every new day rhythm entry (`entry_type: moment`, `change: new`), and when an entry changes, such as a nap getting its end time or the day's note getting longer (`change: updated`);
 - each batch of new photos (`entry_type: photos`), once per batch, not per photo;
 - every new item on the Messages page (`entry_type: message`, `change: new`), and a reply in an existing conversation (`change: updated`).
   This includes messages and replies a parent writes, with `from_parent: true`, so you can leave out your own.
@@ -113,6 +115,9 @@ The first time the integration runs it only records what is already there, so yo
 4. Enter your portal name (e.g. `mijnopvang`, or paste the website address), email address and password.
 
 If the password changes, Home Assistant asks you to log in again.
+
+Both parents can add their own account, also for the same child.
+Each account gets its own devices; the second one's entity ids end in `_2`.
 
 ## Notification examples
 

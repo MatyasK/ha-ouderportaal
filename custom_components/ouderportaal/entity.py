@@ -10,9 +10,17 @@ from .coordinator import OuderportaalCoordinator
 from .timeline import Moment, Photo
 
 
+def child_unique_id(coordinator: OuderportaalCoordinator, child_id: str) -> str:
+    """The child in this account, so two parents can each add theirs for the same child: '<entry id>_<child id>'.
+
+    The base of the child's device identifier and entity unique ids.
+    """
+    return f"{coordinator.config_entry.entry_id}_{child_id}"
+
+
 def child_device_info(coordinator: OuderportaalCoordinator, child_id: str) -> DeviceInfo:
     return DeviceInfo(
-        identifiers={(DOMAIN, child_id)},
+        identifiers={(DOMAIN, child_unique_id(coordinator, child_id))},
         name=coordinator.child_name(child_id),
         manufacturer="Konnect",
         model="Ouderportaal",
@@ -27,7 +35,7 @@ class OuderportaalEntity(CoordinatorEntity[OuderportaalCoordinator]):
     def __init__(self, coordinator: OuderportaalCoordinator, child_id: str, key: str) -> None:
         super().__init__(coordinator)
         self.child_id = child_id
-        self._attr_unique_id = f"{child_id}_{key}"
+        self._attr_unique_id = f"{child_unique_id(coordinator, child_id)}_{key}"
         self._attr_translation_key = key
         self._attr_device_info = child_device_info(coordinator, child_id)
 

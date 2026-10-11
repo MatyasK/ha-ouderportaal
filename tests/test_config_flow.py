@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 from homeassistant.config_entries import SOURCE_USER
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, EVENT_HOMEASSISTANT_CLOSE
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -64,6 +64,21 @@ async def test_login_errors_then_recovers(hass: HomeAssistant, mock_client, side
     mock_client.login.side_effect = None
     result = await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
     assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
+async def test_logging_in_leaves_no_session_behind(hass: HomeAssistant, mock_client) -> None:
+    mock_client.login.side_effect = OuderportaalAuthError("nope")
+    result = await _start(hass)
+    # The first try also sets up Home Assistant's shared connection pool.
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
+    # A session kept until Home Assistant closes waits for that with a listener.
+    listeners = hass.bus.async_listeners().get(EVENT_HOMEASSISTANT_CLOSE, 0)
+
+    for _ in range(3):
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
+
+    assert result["errors"] == {"base": "invalid_auth"}
+    assert hass.bus.async_listeners().get(EVENT_HOMEASSISTANT_CLOSE, 0) == listeners
 
 
 async def test_invalid_portal(hass: HomeAssistant, mock_client) -> None:

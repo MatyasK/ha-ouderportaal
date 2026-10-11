@@ -17,6 +17,8 @@ DAY_UPDATE_INTERVAL: Final = timedelta(minutes=5)
 NIGHT_UPDATE_INTERVAL: Final = timedelta(hours=1)
 
 STORAGE_VERSION: Final = 1
+# The history is written this long after it changes, so a burst of changes is written once.
+HISTORY_SAVE_DELAY_S: Final = 10
 
 # Each poll lists the Messages page items of this many recent days; a reply moves a conversation's date forward.
 MESSAGES_POLL_DAYS: Final = 7

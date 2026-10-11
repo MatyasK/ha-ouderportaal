@@ -8,6 +8,7 @@ app reads.
 from __future__ import annotations
 
 import copy
+import gc
 import math
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
@@ -422,6 +423,21 @@ async def test_failing_schedule_only_affects_the_schedule(hass: HomeAssistant, e
     await _later(hass, freezer, 30)
     assert hass.states.get("calendar.sam_schedule").state == STATE_OFF
     assert len(await _events(hass, "2026-10-05 00:00", 14)) == 4
+
+
+async def test_failing_month_stops_the_read(hass: HomeAssistant, entry, mock_client, freezer, caplog) -> None:
+    await _setup(hass, entry)
+    mock_client.get_schedule.reset_mock()
+    mock_client.get_schedule.side_effect = OuderportaalConnectionError("agenda down")
+
+    await _later(hass, freezer, 30)
+    gc.collect()
+    await hass.async_block_till_done()
+
+    assert hass.states.get("calendar.sam_schedule").state == STATE_UNAVAILABLE
+    # The other months are not asked for, and no failure is left unhandled.
+    assert mock_client.get_schedule.await_count == 1
+    assert "never retrieved" not in caplog.text
 
 
 async def test_failing_timeline_keeps_the_schedule(hass: HomeAssistant, entry, mock_client) -> None:

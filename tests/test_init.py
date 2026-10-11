@@ -9,6 +9,7 @@ import pytest
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, STATE_OFF, STATE_UNAVAILABLE
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_capture_events
 
 from custom_components.ouderportaal.api import OuderportaalAuthError, OuderportaalConnectionError
@@ -81,9 +82,8 @@ async def test_entities_reflect_the_day(hass: HomeAssistant, entry, mock_client)
     assert hass.states.get("calendar.sam_day_rhythm").state == STATE_OFF
 
 
-async def test_calendar_lists_moments(hass: HomeAssistant, entry, mock_client) -> None:
-    await _setup(hass, entry)
-
+async def _day_events(hass: HomeAssistant) -> list[dict[str, Any]]:
+    """The day rhythm calendar's events on the fixture's day."""
     result = await hass.services.async_call(
         "calendar",
         "get_events",
@@ -91,8 +91,13 @@ async def test_calendar_lists_moments(hass: HomeAssistant, entry, mock_client) -
         blocking=True,
         return_response=True,
     )
+    return result["calendar.sam_day_rhythm"]["events"]
 
-    events = result["calendar.sam_day_rhythm"]["events"]
+
+async def test_calendar_lists_moments(hass: HomeAssistant, entry, mock_client) -> None:
+    await _setup(hass, entry)
+
+    events = await _day_events(hass)
     assert [(e["summary"], e["start"], e["end"]) for e in events] == [
         ("09:00 (Fles)voeding", "2026-10-07T09:00:00+02:00", "2026-10-07T09:15:00+02:00"),
         ("10:10-10:48 Slapen", "2026-10-07T10:10:00+02:00", "2026-10-07T10:48:00+02:00"),
@@ -149,6 +154,125 @@ async def test_finished_nap_is_announced_as_update(hass: HomeAssistant, entry, m
     (event,) = events
     assert event.data["change"] == "updated"
     assert event.data["duration_minutes"] == 45
+
+
+async def test_extended_note_is_announced_as_update(hass: HomeAssistant, entry, mock_client, timeline_cards) -> None:
+    mock_client.offsets[0] = copy.deepcopy(timeline_cards)
+    mock_client.offsets[0][0]["journal"]["journalContent"] = "<p>Lekker gespeeld</p>"
+    events = async_capture_events(hass, EVENT_NEW_ENTRY)
+    await _setup(hass, entry)
+
+    mock_client.offsets[0] = copy.deepcopy(mock_client.offsets[0])
+    mock_client.offsets[0][0]["journal"]["journalContent"] = "<p>Lekker gespeeld</p><p>Tot morgen!</p>"
+    await _refresh(hass, entry)
+    mock_client.offsets[0][0]["journal"]["journalContent"] = "<p>Lekker gespeeld</p><p>Tot morgen!</p><p>Juf</p>"
+    await _refresh(hass, entry)
+
+    assert [(e.data["category"], e.data["change"]) for e in events] == [("note", "updated"), ("note", "updated")]
+    notes = [e for e in await _day_events(hass) if e["summary"] == "Note from Juf"]
+    assert [n["description"] for n in notes] == ["Lekker gespeeld\nTot morgen!\nJuf"]
+
+
+async def test_corrected_day_rhythm_replaces_the_old_entries(
+    hass: HomeAssistant, entry, mock_client, timeline_cards
+) -> None:
+    mock_client.offsets[0] = _with(timeline_cards, _moment("luier", "13:30 Luier"), _moment("luier", "13:40 Luier"))
+    await _setup(hass, entry)
+
+    # The daycare moves the first diaper to 13:20 and removes the second.
+    mock_client.offsets[0] = _with(timeline_cards, _moment("luier", "13:20 Luier"))
+    await _refresh(hass, entry)
+
+    assert [e["summary"] for e in await _day_events(hass)] == [
+        "09:00 (Fles)voeding",
+        "10:10-10:48 Slapen",
+        "12:00 (Fles)voeding",
+        "13:20 Luier",
+    ]
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await _setup(hass, entry)
+    assert [m.title for m in entry.runtime_data.history.moments][-1] == "13:20 Luier"
+    assert len(entry.runtime_data.history.moments) == 4
+
+
+async def test_unusable_card_does_not_stop_the_update(hass: HomeAssistant, entry, mock_client, timeline_cards) -> None:
+    broken = copy.deepcopy(timeline_cards[0]) | {"date": None}
+    impossible = _with(timeline_cards, _moment("slapen-bedje", "12:40 - 24:00 Slapen"))[0]
+    impossible["date"] -= 24 * 3600 * 1000
+    mock_client.offsets[0] = [broken, impossible, *timeline_cards]
+
+    await _setup(hass, entry)
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert hass.states.get("sensor.sam_last_activity").state == "12:00 (Fles)voeding"
+    assert hass.states.get("sensor.sam_milk_today").state == "270.0"
+
+
+async def test_two_accounts_for_the_same_child(hass: HomeAssistant, entry, mock_client, device_registry) -> None:
+    other = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="mijnopvang:other-parent@example.com",
+        title="mijnopvang.ouderportaal.nl",
+        data={CONF_PORTAL: "mijnopvang", CONF_USERNAME: "other-parent@example.com", CONF_PASSWORD: "secret"},
+    )
+    other.add_to_hass(hass)
+
+    # Sets up both accounts.
+    await _setup(hass, entry)
+
+    assert other.state is ConfigEntryState.LOADED
+    for entity_id in ("sensor.sam_last_activity", "sensor.sam_last_activity_2"):
+        assert hass.states.get(entity_id).state == "12:00 (Fles)voeding"
+    for entity_id in ("calendar.sam_day_rhythm", "calendar.sam_schedule", "image.sam_latest_photo"):
+        assert hass.states.get(f"{entity_id}_2") is not None
+    # Each account has its own devices.
+    for config_entry in (entry, other):
+        devices = dr.async_entries_for_config_entry(device_registry, config_entry.entry_id)
+        assert sorted(d.name for d in devices) == ["Ouderportaal mailbox", "Sam"]
+        assert all(d.config_entry_id == config_entry.entry_id for d in devices)
+
+
+async def test_upgrade_keeps_entities_and_device(
+    hass: HomeAssistant, entry, mock_client, entity_registry, device_registry
+) -> None:
+    """Before minor version 2, the ids of a child's device and entities did not include the account."""
+    device = device_registry.async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={(DOMAIN, CHILD_ID)}, name="Sam"
+    )
+    for domain, key in (("sensor", "last_activity"), ("calendar", "schedule"), ("image", "latest_photo")):
+        entity_registry.async_get_or_create(
+            domain,
+            DOMAIN,
+            f"{CHILD_ID}_{key}",
+            config_entry=entry,
+            device_id=device.id,
+            suggested_object_id=f"sam_{key}",
+        )
+    entity_registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{entry.entry_id}_unread_messages",
+        config_entry=entry,
+        suggested_object_id="ouderportaal_mailbox_unread_messages",
+    )
+
+    await _setup(hass, entry)
+
+    assert (entry.version, entry.minor_version) == (1, 2)
+    for entity_id, key in (
+        ("sensor.sam_last_activity", "last_activity"),
+        ("calendar.sam_schedule", "schedule"),
+        ("image.sam_latest_photo", "latest_photo"),
+    ):
+        assert entity_registry.async_get(entity_id).unique_id == f"{entry.entry_id}_{CHILD_ID}_{key}"
+        assert entity_registry.async_get(entity_id).device_id == device.id
+        assert hass.states.get(entity_id) is not None
+        assert hass.states.get(f"{entity_id}_2") is None
+    assert entity_registry.async_get("sensor.ouderportaal_mailbox_unread_messages").unique_id == (
+        f"{entry.entry_id}_unread_messages"
+    )
+    assert hass.states.get("sensor.sam_last_activity").state == "12:00 (Fles)voeding"
+    assert device_registry.async_get(device.id).identifiers == {(DOMAIN, f"{entry.entry_id}_{CHILD_ID}")}
 
 
 async def test_seen_entries_survive_a_restart(hass: HomeAssistant, entry, mock_client, timeline_cards) -> None:

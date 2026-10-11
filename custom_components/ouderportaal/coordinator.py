@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -31,6 +31,7 @@ from .const import (
     DAY_UPDATE_INTERVAL,
     DOMAIN,
     EVENT_NEW_ENTRY,
+    HISTORY_SAVE_DELAY_S,
     MESSAGES_POLL_DAYS,
     NIGHT_UPDATE_INTERVAL,
     SCHEDULE_FUTURE_DAYS,
@@ -88,6 +89,8 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
         self.authorizations: set[str] = set()
         self._seen_store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.seen")
         self._history_store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.history")
+        # A save is waiting for its delay.
+        self._history_unsaved = False
         # None until loaded: an empty store means "first run", which must not notify about history.
         self._seen_moments: dict[str, str] | None = None
         self._seen_photos: set[str] = set()
@@ -141,20 +144,23 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
             await self._announce(timeline)
 
         today = dt_util.now().date()
-        messages = await self._fetch_messages(today - timedelta(days=MESSAGES_POLL_DAYS), today + timedelta(days=1))
+        try:
+            messages = await self._fetch_messages(today - timedelta(days=MESSAGES_POLL_DAYS), today + timedelta(days=1))
+        except OuderportaalAuthError as err:
+            raise ConfigEntryAuthFailed(str(err)) from err
         if messages is not None:
             await self._announce_messages(messages)
             timeline.messages = messages
             await self._update_unread()
 
-        await self._add_to_history(timeline)
+        self._add_to_history(timeline)
         return self.history
 
     async def _fetch_messages(self, start: date, end: date) -> list[Message] | None:
         """Everything on the portal's Messages page, newest first.
 
         Messages are an extra: when they fail, the rest of the update still goes through. All or nothing, so a
-        failing part does not look like its items were removed.
+        failing part does not look like its items were removed. A rejected login is raised.
         """
         tz = dt_util.get_default_time_zone()
         messages: list[Message] = []
@@ -165,8 +171,8 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
                 messages += parse_news(await self.client.get_news(start, end), tz)
             if AUTH_NEWSLETTERS in self.authorizations:
                 messages += parse_newsletters(await self.client.get_newsletters(start, end), tz)
-        except OuderportaalAuthError as err:
-            raise ConfigEntryAuthFailed(str(err)) from err
+        except OuderportaalAuthError:
+            raise
         except OuderportaalError as err:
             if not self._messages_failing:
                 _LOGGER.warning("Could not read messages, will keep trying: %s", err)
@@ -200,17 +206,27 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
         """Import the last BACKFILL_DAYS days once, without announcing them. Runs in the background."""
         if self._backfill_version >= BACKFILL_VERSION:
             return
+        try:
+            await self._backfill()
+        except OuderportaalAuthError as err:
+            # Outside an update, so nothing else asks to log in again. Logging in reloads the entry, which imports.
+            _LOGGER.warning("Importing history postponed until you log in again: %s", err)
+            self.config_entry.async_start_reauth(self.hass)
+
+    async def _backfill(self) -> None:
         since = dt_util.now().date() - timedelta(days=BACKFILL_DAYS)
         tz = dt_util.get_default_time_zone()
         messages = await self._fetch_messages(since, dt_util.now().date() + timedelta(days=1))
         if messages is None:
             _LOGGER.warning("Importing history postponed until messages can be read; will retry after a restart")
             return
-        await self._add_to_history(Timeline(moments=[], photos=[], messages=messages), since=since)
+        self._add_to_history(Timeline(moments=[], photos=[], messages=messages), since=since)
         offset = 0
         for _ in range(BACKFILL_MAX_PAGES):
             try:
                 cards = await self.client.get_timeline(offset)
+            except OuderportaalAuthError:
+                raise
             except OuderportaalError as err:
                 _LOGGER.warning("Importing history stopped at card %s, will retry after a restart: %s", offset, err)
                 return
@@ -220,14 +236,14 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
             offset += len(cards)
             fetched = parse_timeline(cards, tz)
             await self.archive.async_download_missing(p for p in fetched.photos if p.day >= since)
-            await self._add_to_history(fetched, since=since)
+            self._add_to_history(fetched, since=since)
             self.async_set_updated_data(self.history)
             days = [m.day for m in fetched.moments] + [p.day for p in fetched.photos]
             if days and min(days) < since:
                 break
             await asyncio.sleep(BACKFILL_PAGE_DELAY_S)
         self._backfill_version = BACKFILL_VERSION
-        await self._save_history()
+        self._save_history()
         _LOGGER.info(
             "Imported history since %s: %s moments, %s photos, %s messages",
             since,
@@ -236,16 +252,29 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
             len(self.history.messages),
         )
 
-    async def _add_to_history(self, timeline: Timeline, *, since: date | None = None) -> None:
+    @callback
+    def _add_to_history(self, timeline: Timeline, *, since: date | None = None) -> None:
         merged = merge_timelines(self.history, timeline, since=since)
-        if merged.to_dict() != self.history.to_dict():
+        # Compares the entries, not the photos' signed URLs, which change on every poll and are not stored.
+        if merged != self.history:
             self.history = merged
-            await self._save_history()
+            self._save_history()
 
-    async def _save_history(self) -> None:
-        await self._history_store.async_save(
-            {"backfill_version": self._backfill_version, "timeline": self.history.to_dict()}
-        )
+    @callback
+    def _save_history(self) -> None:
+        """Written a little later, so a burst of changes, such as the history import's pages, is written once."""
+        self._history_unsaved = True
+        self._history_store.async_delay_save(self._history_data, HISTORY_SAVE_DELAY_S)
+
+    def _history_data(self) -> dict[str, Any]:
+        return {"backfill_version": self._backfill_version, "timeline": self.history.to_dict()}
+
+    async def async_shutdown(self) -> None:
+        await super().async_shutdown()
+        # Write now what is waiting to be written: the entry can be set up again right away, and reads the file.
+        if self._history_unsaved:
+            self._history_unsaved = False
+            await self._history_store.async_save(self._history_data())
 
     async def _announce(self, timeline: Timeline) -> None:
         first_run = self._seen_moments is None
@@ -392,11 +421,14 @@ class ScheduleCoordinator(DataUpdateCoordinator[list[Session]]):
 
     async def _async_update_data(self) -> list[Session]:
         ranges = schedule_ranges(dt_util.now().date(), SCHEDULE_PAST_DAYS, SCHEDULE_FUTURE_DAYS, SCHEDULE_REQUEST_DAYS)
+        days: list[dict[str, Any]] = []
         try:
-            # All or nothing, so a month that fails does not look like its days were cancelled.
-            answers = await asyncio.gather(*(self.client.get_schedule(start, end) for start, end in ranges))
+            # One month after the other, like the portal's Agenda. All or nothing, so a month that fails does not
+            # look like its days were cancelled, and the months after it are not asked for.
+            for start, end in ranges:
+                days += await self.client.get_schedule(start, end)
         except OuderportaalAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except OuderportaalError as err:
             raise UpdateFailed(str(err)) from err
-        return parse_schedule([day for days in answers for day in days], dt_util.get_default_time_zone())
+        return parse_schedule(days, dt_util.get_default_time_zone())
