@@ -37,6 +37,9 @@
     "calendar": {
       "day_rhythm": {
         "name": "Dagritme"
+      },
+      "schedule": {
+        "name": "Planning"
       }
     },
     "image": {

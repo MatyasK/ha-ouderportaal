@@ -20,6 +20,31 @@ One device per child, with:
 | `sensor.<child>_sleep_today` | Total minutes slept today |
 | `image.<child>_latest_photo` | The newest photo, served from the saved copy |
 | `calendar.<child>_day_rhythm` | The full day rhythm history as calendar events; "on" during an ongoing nap |
+| `calendar.<child>_schedule` | When your child is planned at daycare, from the portal's Agenda; "on" while they are there |
+
+### Schedule
+
+The schedule calendar shows the times your child is planned at daycare, as on the portal's Agenda, from a month back to three months ahead.
+Each time is called "Daycare", with what makes it different in brackets:
+
+| Summary | What it is |
+|---|---|
+| `Daycare` | A usual day |
+| `Daycare (extra day)` | An extra day |
+| `Daycare (swap day from 7 October)` | A day swapped from another day |
+| `Daycare (moved)` | A day moved to another group |
+| `Daycare (option)` | An option, not certain yet |
+| `Daycare (to confirm)` | A day the daycare asks you to confirm; `Daycare (confirmed)` once you have |
+| `Daycare (extra day, pending approval)` | A request the daycare has not approved yet; also `on hold` and `pending parent approval` |
+
+Absences (illness, vacation, a day swapped away) are left out, the way a calendar leaves out cancelled events, so the calendar is "on" only while your child is expected at daycare.
+Requests that were rejected, cancelled or expired are left out too.
+A morning and an afternoon on the same day are two events.
+When the portal knows them, the group and the status of a request are in the event's description, and the daycare's location in its location.
+
+The schedule is read every 30 minutes, day and night, so a change on the portal can take that long to show up.
+If the Agenda cannot be read, the schedule calendar is unavailable until it can; the rest of the integration keeps working, and the other way around.
+Only accounts that see the Agenda on the portal get this calendar.
 
 ### Messages
 
@@ -148,6 +173,33 @@ automation:
             url: "{{ trigger.event.data.url }}"
 ```
 
+The evening before a daycare day:
+
+```yaml
+automation:
+  - alias: Daycare tomorrow
+    triggers:
+      - trigger: time
+        at: "19:00:00"
+    actions:
+      - action: calendar.get_events
+        target:
+          entity_id: calendar.sam_schedule
+        data:
+          start_date_time: "{{ today_at() + timedelta(days=1) }}"
+          duration:
+            days: 1
+        response_variable: tomorrow
+      - variables:
+          events: "{{ tomorrow['calendar.sam_schedule'].events }}"
+      - condition: template
+        value_template: "{{ events | count > 0 }}"
+      - action: notify.mobile_app_your_phone
+        data:
+          title: "Daycare tomorrow"
+          message: "{{ events[0].summary }} from {{ events[0].start[11:16] }}"
+```
+
 `media_url` points at the saved copy, which the companion app loads with your Home Assistant login.
 `image_url` is the portal's own signed URL; it works anywhere but expires after about an hour.
 
@@ -167,6 +219,7 @@ Photos: `child_id`, `child_name`, `count`, `media_url`, `image_url`, `photos` (e
   The token lasts 15 minutes and is renewed with `PUT /auth-api/token` and the `__Host-refresh_token` cookie (valid for 1 hour).
   If renewing fails, it logs in again.
 - Each poll also reads the Messages page items of the last 7 days: `GET /logbook/overview`, `/htmlnews/view` and `/newsletter`, the same lists the portal reads, gated by the same account permissions (`/parent/authorizations`).
+- Every 30 minutes it also reads the Agenda, `GET /calendar/<from>/until/<to>`, a month per request from a month back to three months ahead, if the account may see the Agenda (`/parent/authorizations`).
 - The day rhythm comes as HTML inside the day's journal card and is parsed into entries.
   The category comes from the icon the daycare picked (`dagritme-flesje`, `dagritme-slapen-bedje`, ...).
 - What was already announced, and the history, are stored in `.storage/`, so a restart does not repeat notifications.
@@ -175,6 +228,8 @@ Limitations:
 
 - History before installing goes back 30 days.
 - Documents are not included yet.
+- The Agenda's activities, parent meetings and activity programs are not included yet, only the schedule.
+- The schedule's summaries are in English.
 
 ## Development
 

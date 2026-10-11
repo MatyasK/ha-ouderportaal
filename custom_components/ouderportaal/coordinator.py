@@ -18,6 +18,7 @@ from homeassistant.util import dt as dt_util
 from .api import OuderportaalAuthError, OuderportaalClient, OuderportaalError
 from .archive import PhotoArchive
 from .const import (
+    AUTH_AGENDA,
     AUTH_MESSAGES,
     AUTH_NEWS,
     AUTH_NEWSLETTERS,
@@ -32,8 +33,13 @@ from .const import (
     EVENT_NEW_ENTRY,
     MESSAGES_POLL_DAYS,
     NIGHT_UPDATE_INTERVAL,
+    SCHEDULE_FUTURE_DAYS,
+    SCHEDULE_PAST_DAYS,
+    SCHEDULE_REQUEST_DAYS,
+    SCHEDULE_UPDATE_INTERVAL,
     STORAGE_VERSION,
 )
+from .schedule import Session, parse_schedule, schedule_ranges
 from .timeline import (
     Message,
     Moment,
@@ -92,6 +98,8 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
         # The portal's own unread counts ('messages', 'news', 'newsletters'); None until read once.
         self.unread_counts: dict[str, int] | None = None
         self._messages_failing = False
+        # Set up after the first refresh, when the account may see the Agenda.
+        self.schedule: ScheduleCoordinator | None = None
 
     async def _async_setup(self) -> None:
         try:
@@ -169,6 +177,11 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
         self._messages_failing = False
         messages.sort(key=lambda m: m.sent, reverse=True)
         return messages
+
+    @property
+    def has_schedule(self) -> bool:
+        """Whether the portal shows this account its Agenda."""
+        return not AUTH_AGENDA.isdisjoint(self.authorizations)
 
     async def _update_unread(self) -> None:
         try:
@@ -356,3 +369,34 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
                 ],
             },
         )
+
+
+class ScheduleCoordinator(DataUpdateCoordinator[list[Session]]):
+    """Reads the children's schedule from the portal's Agenda: the planned sessions, earliest first.
+
+    Apart from the timeline, which changes all day: the schedule is read on its own clock, and when one of the two
+    cannot be read, the other's entities stay available.
+    """
+
+    config_entry: OuderportaalConfigEntry
+
+    def __init__(self, hass: HomeAssistant, entry: OuderportaalConfigEntry, client: OuderportaalClient) -> None:
+        super().__init__(
+            hass,
+            _LOGGER,
+            config_entry=entry,
+            name=f"{DOMAIN} schedule",
+            update_interval=SCHEDULE_UPDATE_INTERVAL,
+        )
+        self.client = client
+
+    async def _async_update_data(self) -> list[Session]:
+        ranges = schedule_ranges(dt_util.now().date(), SCHEDULE_PAST_DAYS, SCHEDULE_FUTURE_DAYS, SCHEDULE_REQUEST_DAYS)
+        try:
+            # All or nothing, so a month that fails does not look like its days were cancelled.
+            answers = await asyncio.gather(*(self.client.get_schedule(start, end) for start, end in ranges))
+        except OuderportaalAuthError as err:
+            raise ConfigEntryAuthFailed(str(err)) from err
+        except OuderportaalError as err:
+            raise UpdateFailed(str(err)) from err
+        return parse_schedule([day for days in answers for day in days], dt_util.get_default_time_zone())

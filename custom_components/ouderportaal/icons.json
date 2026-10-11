@@ -3,6 +3,9 @@
     "calendar": {
       "day_rhythm": {
         "default": "mdi:calendar-clock"
+      },
+      "schedule": {
+        "default": "mdi:calendar-account"
       }
     },
     "image": {

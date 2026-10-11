@@ -12,7 +12,7 @@ from homeassistant.helpers.typing import ConfigType
 from . import websocket
 from .api import OuderportaalClient
 from .const import CONF_PORTAL, DOMAIN
-from .coordinator import OuderportaalConfigEntry, OuderportaalCoordinator
+from .coordinator import OuderportaalConfigEntry, OuderportaalCoordinator, ScheduleCoordinator
 
 PLATFORMS = [Platform.CALENDAR, Platform.IMAGE, Platform.SENSOR]
 
@@ -34,6 +34,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: OuderportaalConfigEntry)
     client = create_client(hass, entry.data[CONF_PORTAL], entry.data[CONF_USERNAME], entry.data[CONF_PASSWORD])
     coordinator = OuderportaalCoordinator(hass, entry, client)
     await coordinator.async_config_entry_first_refresh()
+    if coordinator.has_schedule:
+        coordinator.schedule = ScheduleCoordinator(hass, entry, client)
+        # Not the first-refresh variant: an Agenda that cannot be read must not hold up the rest. Its calendar is then
+        # unavailable until a later refresh works.
+        await coordinator.schedule.async_refresh()
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     # Cancelled automatically when the entry unloads.

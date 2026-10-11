@@ -1,0 +1,488 @@
+{
+  "result": true,
+  "payload": {
+    "days": [
+      {
+        "title": null,
+        "dayOfMonth": 7,
+        "dayType": "schoolday",
+        "date": 1791383603139,
+        "children": [
+          {
+            "child": {
+              "id": "c0ffee00c0ffee00c0ffee00c0ffee00",
+              "fullname": "Sam Test",
+              "firstName": "Sam",
+              "lastName": "Test",
+              "avatar": null
+            },
+            "showLocationName": true,
+            "combinedPlanningParts": [
+              {
+                "planningParts": [
+                  {
+                    "startTime": 1791349200000,
+                    "endTime": 1791369000000,
+                    "attend": true,
+                    "option": false,
+                    "extraInfo": null,
+                    "absentType": null,
+                    "bookingType": null,
+                    "bookingStatus": null,
+                    "childGroup": null,
+                    "bookingId": null,
+                    "canCancel": false,
+                    "atomic": false,
+                    "toConfirmProduct": null,
+                    "cancelPeriodInDays": null,
+                    "cancelBookingInfo": null,
+                    "plannedAttendanceCode": {
+                      "code": "attend",
+                      "label": "planned.attendance.code.attend"
+                    },
+                    "plannedAttendanceSubCode": {
+                      "code": "planned",
+                      "label": "planned.attendance.sub.code.planned"
+                    },
+                    "interchangeFromDate": null,
+                    "interchangeToDate": null,
+                    "readOnly": false
+                  }
+                ],
+                "subscriptions": []
+              }
+            ],
+            "toConfirmPlannedAttendancesIds": []
+          }
+        ],
+        "hasMore": false,
+        "plannableActivities": {
+          "agendaActivities": []
+        },
+        "parentMeetings": [],
+        "activityPrograms": []
+      },
+      {
+        "title": null,
+        "dayOfMonth": 8,
+        "dayType": "schoolday",
+        "date": 1791470003139,
+        "children": [
+          {
+            "child": {
+              "id": "c0ffee00c0ffee00c0ffee00c0ffee00",
+              "fullname": "Sam Test",
+              "firstName": "Sam",
+              "lastName": "Test",
+              "avatar": null
+            },
+            "showLocationName": true,
+            "combinedPlanningParts": [
+              {
+                "planningParts": [
+                  {
+                    "startTime": 1791435600000,
+                    "endTime": 1791475200000,
+                    "attend": true,
+                    "option": false,
+                    "extraInfo": null,
+                    "absentType": null,
+                    "bookingType": null,
+                    "bookingStatus": null,
+                    "childGroup": null,
+                    "bookingId": null,
+                    "canCancel": false,
+                    "atomic": false,
+                    "toConfirmProduct": null,
+                    "cancelPeriodInDays": null,
+                    "cancelBookingInfo": null,
+                    "plannedAttendanceCode": {
+                      "code": "attend",
+                      "label": "planned.attendance.code.attend"
+                    },
+                    "plannedAttendanceSubCode": {
+                      "code": "planned",
+                      "label": "planned.attendance.sub.code.planned"
+                    },
+                    "interchangeFromDate": null,
+                    "interchangeToDate": null,
+                    "readOnly": false
+                  }
+                ],
+                "subscriptions": []
+              }
+            ],
+            "toConfirmPlannedAttendancesIds": []
+          }
+        ],
+        "hasMore": false,
+        "plannableActivities": {
+          "agendaActivities": []
+        },
+        "parentMeetings": [],
+        "activityPrograms": []
+      },
+      {
+        "title": null,
+        "dayOfMonth": 14,
+        "dayType": "schoolday",
+        "date": 1791988407025,
+        "children": [
+          {
+            "child": {
+              "id": "c0ffee00c0ffee00c0ffee00c0ffee00",
+              "fullname": "Sam Test",
+              "firstName": "Sam",
+              "lastName": "Test",
+              "avatar": null
+            },
+            "showLocationName": true,
+            "combinedPlanningParts": [
+              {
+                "planningParts": [
+                  {
+                    "startTime": 1791954000000,
+                    "endTime": 1791993600000,
+                    "attend": true,
+                    "option": false,
+                    "extraInfo": null,
+                    "absentType": null,
+                    "bookingType": null,
+                    "bookingStatus": null,
+                    "childGroup": null,
+                    "bookingId": null,
+                    "canCancel": false,
+                    "atomic": false,
+                    "toConfirmProduct": null,
+                    "cancelPeriodInDays": null,
+                    "cancelBookingInfo": null,
+                    "plannedAttendanceCode": {
+                      "code": "attend",
+                      "label": "planned.attendance.code.attend"
+                    },
+                    "plannedAttendanceSubCode": {
+                      "code": "planned",
+                      "label": "planned.attendance.sub.code.planned"
+                    },
+                    "interchangeFromDate": null,
+                    "interchangeToDate": null,
+                    "readOnly": false
+                  }
+                ],
+                "subscriptions": []
+              }
+            ],
+            "toConfirmPlannedAttendancesIds": []
+          }
+        ],
+        "hasMore": false,
+        "plannableActivities": {
+          "agendaActivities": []
+        },
+        "parentMeetings": [],
+        "activityPrograms": []
+      },
+      {
+        "title": null,
+        "dayOfMonth": 15,
+        "dayType": "schoolday",
+        "date": 1792074807025,
+        "children": [
+          {
+            "child": {
+              "id": "c0ffee00c0ffee00c0ffee00c0ffee00",
+              "fullname": "Sam Test",
+              "firstName": "Sam",
+              "lastName": "Test",
+              "avatar": null
+            },
+            "showLocationName": true,
+            "combinedPlanningParts": [
+              {
+                "planningParts": [
+                  {
+                    "startTime": 1792040400000,
+                    "endTime": 1792080000000,
+                    "attend": true,
+                    "option": false,
+                    "extraInfo": null,
+                    "absentType": null,
+                    "bookingType": null,
+                    "bookingStatus": null,
+                    "childGroup": null,
+                    "bookingId": null,
+                    "canCancel": false,
+                    "atomic": false,
+                    "toConfirmProduct": null,
+                    "cancelPeriodInDays": null,
+                    "cancelBookingInfo": null,
+                    "plannedAttendanceCode": {
+                      "code": "attend",
+                      "label": "planned.attendance.code.attend"
+                    },
+                    "plannedAttendanceSubCode": {
+                      "code": "planned",
+                      "label": "planned.attendance.sub.code.planned"
+                    },
+                    "interchangeFromDate": null,
+                    "interchangeToDate": null,
+                    "readOnly": false
+                  }
+                ],
+                "subscriptions": []
+              }
+            ],
+            "toConfirmPlannedAttendancesIds": []
+          }
+        ],
+        "hasMore": false,
+        "plannableActivities": {
+          "agendaActivities": []
+        },
+        "parentMeetings": [],
+        "activityPrograms": []
+      },
+      {
+        "title": null,
+        "dayOfMonth": 21,
+        "dayType": "holiday",
+        "date": 1792593208801,
+        "children": [
+          {
+            "child": {
+              "id": "c0ffee00c0ffee00c0ffee00c0ffee00",
+              "fullname": "Sam Test",
+              "firstName": "Sam",
+              "lastName": "Test",
+              "avatar": null
+            },
+            "showLocationName": true,
+            "combinedPlanningParts": [
+              {
+                "planningParts": [
+                  {
+                    "startTime": 1792558800000,
+                    "endTime": 1792598400000,
+                    "attend": true,
+                    "option": false,
+                    "extraInfo": null,
+                    "absentType": null,
+                    "bookingType": null,
+                    "bookingStatus": null,
+                    "childGroup": null,
+                    "bookingId": null,
+                    "canCancel": false,
+                    "atomic": false,
+                    "toConfirmProduct": null,
+                    "cancelPeriodInDays": null,
+                    "cancelBookingInfo": null,
+                    "plannedAttendanceCode": {
+                      "code": "attend",
+                      "label": "planned.attendance.code.attend"
+                    },
+                    "plannedAttendanceSubCode": {
+                      "code": "planned",
+                      "label": "planned.attendance.sub.code.planned"
+                    },
+                    "interchangeFromDate": null,
+                    "interchangeToDate": null,
+                    "readOnly": false
+                  }
+                ],
+                "subscriptions": []
+              }
+            ],
+            "toConfirmPlannedAttendancesIds": []
+          }
+        ],
+        "hasMore": false,
+        "plannableActivities": {
+          "agendaActivities": []
+        },
+        "parentMeetings": [],
+        "activityPrograms": []
+      },
+      {
+        "title": null,
+        "dayOfMonth": 22,
+        "dayType": "holiday",
+        "date": 1792679608801,
+        "children": [
+          {
+            "child": {
+              "id": "c0ffee00c0ffee00c0ffee00c0ffee00",
+              "fullname": "Sam Test",
+              "firstName": "Sam",
+              "lastName": "Test",
+              "avatar": null
+            },
+            "showLocationName": true,
+            "combinedPlanningParts": [
+              {
+                "planningParts": [
+                  {
+                    "startTime": 1792645200000,
+                    "endTime": 1792684800000,
+                    "attend": true,
+                    "option": false,
+                    "extraInfo": null,
+                    "absentType": null,
+                    "bookingType": null,
+                    "bookingStatus": null,
+                    "childGroup": null,
+                    "bookingId": null,
+                    "canCancel": false,
+                    "atomic": false,
+                    "toConfirmProduct": null,
+                    "cancelPeriodInDays": null,
+                    "cancelBookingInfo": null,
+                    "plannedAttendanceCode": {
+                      "code": "attend",
+                      "label": "planned.attendance.code.attend"
+                    },
+                    "plannedAttendanceSubCode": {
+                      "code": "planned",
+                      "label": "planned.attendance.sub.code.planned"
+                    },
+                    "interchangeFromDate": null,
+                    "interchangeToDate": null,
+                    "readOnly": false
+                  }
+                ],
+                "subscriptions": []
+              }
+            ],
+            "toConfirmPlannedAttendancesIds": []
+          }
+        ],
+        "hasMore": false,
+        "plannableActivities": {
+          "agendaActivities": []
+        },
+        "parentMeetings": [],
+        "activityPrograms": []
+      },
+      {
+        "title": null,
+        "dayOfMonth": 28,
+        "dayType": "schoolday",
+        "date": 1793201610463,
+        "children": [
+          {
+            "child": {
+              "id": "c0ffee00c0ffee00c0ffee00c0ffee00",
+              "fullname": "Sam Test",
+              "firstName": "Sam",
+              "lastName": "Test",
+              "avatar": null
+            },
+            "showLocationName": true,
+            "combinedPlanningParts": [
+              {
+                "planningParts": [
+                  {
+                    "startTime": 1793167200000,
+                    "endTime": 1793206800000,
+                    "attend": true,
+                    "option": false,
+                    "extraInfo": null,
+                    "absentType": null,
+                    "bookingType": null,
+                    "bookingStatus": null,
+                    "childGroup": null,
+                    "bookingId": null,
+                    "canCancel": false,
+                    "atomic": false,
+                    "toConfirmProduct": null,
+                    "cancelPeriodInDays": null,
+                    "cancelBookingInfo": null,
+                    "plannedAttendanceCode": {
+                      "code": "attend",
+                      "label": "planned.attendance.code.attend"
+                    },
+                    "plannedAttendanceSubCode": {
+                      "code": "planned",
+                      "label": "planned.attendance.sub.code.planned"
+                    },
+                    "interchangeFromDate": null,
+                    "interchangeToDate": null,
+                    "readOnly": false
+                  }
+                ],
+                "subscriptions": []
+              }
+            ],
+            "toConfirmPlannedAttendancesIds": []
+          }
+        ],
+        "hasMore": false,
+        "plannableActivities": {
+          "agendaActivities": []
+        },
+        "parentMeetings": [],
+        "activityPrograms": []
+      },
+      {
+        "title": null,
+        "dayOfMonth": 29,
+        "dayType": "schoolday",
+        "date": 1793288010463,
+        "children": [
+          {
+            "child": {
+              "id": "c0ffee00c0ffee00c0ffee00c0ffee00",
+              "fullname": "Sam Test",
+              "firstName": "Sam",
+              "lastName": "Test",
+              "avatar": null
+            },
+            "showLocationName": true,
+            "combinedPlanningParts": [
+              {
+                "planningParts": [
+                  {
+                    "startTime": 1793253600000,
+                    "endTime": 1793293200000,
+                    "attend": true,
+                    "option": false,
+                    "extraInfo": null,
+                    "absentType": null,
+                    "bookingType": null,
+                    "bookingStatus": null,
+                    "childGroup": null,
+                    "bookingId": null,
+                    "canCancel": false,
+                    "atomic": false,
+                    "toConfirmProduct": null,
+                    "cancelPeriodInDays": null,
+                    "cancelBookingInfo": null,
+                    "plannedAttendanceCode": {
+                      "code": "attend",
+                      "label": "planned.attendance.code.attend"
+                    },
+                    "plannedAttendanceSubCode": {
+                      "code": "planned",
+                      "label": "planned.attendance.sub.code.planned"
+                    },
+                    "interchangeFromDate": null,
+                    "interchangeToDate": null,
+                    "readOnly": false
+                  }
+                ],
+                "subscriptions": []
+              }
+            ],
+            "toConfirmPlannedAttendancesIds": []
+          }
+        ],
+        "hasMore": false,
+        "plannableActivities": {
+          "agendaActivities": []
+        },
+        "parentMeetings": [],
+        "activityPrograms": []
+      }
+    ]
+  },
+  "messages": null
+}
