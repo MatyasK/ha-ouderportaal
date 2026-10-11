@@ -37,6 +37,9 @@
     "calendar": {
       "day_rhythm": {
         "name": "Day rhythm"
+      },
+      "schedule": {
+        "name": "Schedule"
       }
     },
     "image": {

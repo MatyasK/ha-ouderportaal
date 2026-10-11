@@ -7,6 +7,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import OuderportaalCoordinator
+from .schedule import Session
 from .timeline import Moment, Photo
 
 
@@ -36,3 +37,8 @@ class OuderportaalEntity(CoordinatorEntity[OuderportaalCoordinator]):
     def photos(self) -> list[Photo]:
         """This child's photos, newest first."""
         return [p for p in self.coordinator.data.photos if self.child_id in p.child_ids]
+
+    @property
+    def schedule(self) -> list[Session]:
+        """This child's planned sessions, earliest first."""
+        return [s for s in self.coordinator.schedule if s.child_id == self.child_id]

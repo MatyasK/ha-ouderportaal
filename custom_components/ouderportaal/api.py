@@ -199,6 +199,14 @@ class OuderportaalClient:
         payload = await self._get(f"/newsletter?from={start:%Y%m%d}&to={end:%Y%m%d}")
         return list((payload or {}).get("newsletterItems") or [])
 
+    async def get_schedule(self, start: date, end: date) -> list[dict[str, Any]]:
+        """The portal's Agenda from start until end, both included: the days with something planned, for all children.
+
+        The portal asks for a week or a month at a time.
+        """
+        payload = await self._get(f"/calendar/{start:%Y%m%d}/until/{end:%Y%m%d}")
+        return list((payload or {}).get("days") or [])
+
     async def get_notifications(self) -> dict[str, Any]:
         """Unread counts, e.g. {'nrOfNewMessages': 2, 'nrOfNewNewsItems': None, 'nrOfNewNewsletters': 1}."""
         return dict(await self._get("/notification/notifications") or {})

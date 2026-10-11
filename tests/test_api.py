@@ -106,6 +106,7 @@ async def client(portal: FakePortal) -> AsyncIterator[OuderportaalClient]:
     app.router.add_get("/restservices-parent/logbook/overview", portal.serve("messages.json"))
     app.router.add_get("/restservices-parent/htmlnews/view", portal.serve("news.json"))
     app.router.add_get("/restservices-parent/newsletter", portal.serve("newsletters.json"))
+    app.router.add_get("/restservices-parent/calendar/{start}/until/{end}", portal.serve("schedule.json"))
     server = TestServer(app)
     await server.start_server()
     async with aiohttp.ClientSession(cookie_jar=aiohttp.DummyCookieJar()) as session:
@@ -141,6 +142,13 @@ async def test_reads_the_messages_page(client: OuderportaalClient, portal: FakeP
         "/htmlnews/view?from=20260930&to=20261008",
         "/newsletter?from=20260930&to=20261008",
     ]
+
+
+async def test_reads_the_agenda(client: OuderportaalClient, portal: FakePortal) -> None:
+    days = await client.get_schedule(date(2026, 10, 5), date(2026, 10, 11))
+
+    assert [day["dayOfMonth"] for day in days] == [7, 8, 14, 15, 21, 22, 28, 29]
+    assert portal.calls == ["login", "/calendar/20261005/until/20261011"]
 
 
 async def test_reuses_token_while_valid(client: OuderportaalClient, portal: FakePortal) -> None:

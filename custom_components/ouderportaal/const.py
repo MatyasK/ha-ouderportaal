@@ -25,6 +25,22 @@ MESSAGES_POLL_DAYS: Final = 7
 AUTH_MESSAGES: Final = "WEB_PARENT_LOGBOOK"
 AUTH_NEWS: Final = "WEB_HTML_NEWS_VIEW"
 AUTH_NEWSLETTERS: Final = "WEB_ONLY_HTML_NEWSLETTER_ARCHIVE"
+# The portal shows its Agenda, with the children's schedule, to accounts with any of these.
+AUTH_AGENDA: Final = frozenset(
+    {
+        "WEB_PARENT_BOOKING_OVERVIEW",
+        "WEB_PARENT_ACTIVITY_DATABASE",
+        "WEB_PARENT_MEETINGS_VIEW",
+        "WEB_ACTIVITY_PROGRAM_PARENT_OVERVIEW",
+    }
+)
+
+# The schedule rarely changes, so it is read at most this often: from a month back to three months ahead, a month
+# per request like the portal's Agenda.
+SCHEDULE_UPDATE_INTERVAL: Final = timedelta(minutes=30)
+SCHEDULE_PAST_DAYS: Final = 31
+SCHEDULE_FUTURE_DAYS: Final = 92
+SCHEDULE_REQUEST_DAYS: Final = 31
 
 # Photos are saved under <media>/ouderportaal/<date>/.
 ARCHIVE_DIR: Final = "ouderportaal"

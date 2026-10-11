@@ -2,8 +2,8 @@
 
     uv run --no-project --with aiohttp python scripts/try_portal.py mijnopvang you@example.com
 
-Asks for your password, logs in, forces a token refresh, and prints the latest moments and the Messages page.
-Nothing is stored.
+Asks for your password, logs in, forces a token refresh, and prints the latest moments, the Messages page and the
+schedule. Nothing is stored.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import getpass
 import importlib.util
+import json
 import sys
 import time
 from datetime import date, timedelta
@@ -42,6 +43,7 @@ parse_timeline = _timeline.parse_timeline
 parse_messages = _timeline.parse_messages
 parse_news = _timeline.parse_news
 parse_newsletters = _timeline.parse_newsletters
+parse_schedule = _load("schedule").parse_schedule
 
 
 async def main(portal: str, username: str) -> None:
@@ -89,6 +91,30 @@ async def main(portal: str, username: str) -> None:
             print(f"   {message.sent:%Y-%m-%d %H:%M} {unread} [{message.message_type:>15}] {message.subject}")
         counts = await client.get_notifications()
         print(f"   Unread according to the portal: {counts}")
+
+        print("6. Schedule, the coming 4 weeks")
+        days = await client.get_schedule(today, today + timedelta(days=27))
+        parts = [
+            part
+            for day in days
+            for planning in day.get("children") or []
+            for combined in planning.get("combinedPlanningParts") or []
+            for part in combined.get("planningParts") or []
+        ]
+        sessions = parse_schedule(days, ZoneInfo("Europe/Amsterdam"))
+        print(f"   {len(parts)} planned parts, {len(sessions)} in the calendar (absences are left out)")
+        names = {c["id"]: c.get("firstName", "?") for c in children}
+        for session in sessions:
+            child = names.get(session.child_id, "?")
+            print(f"   {session.start:%a %Y-%m-%d %H:%M}-{session.end:%H:%M} {child}: {session.summary}")
+            if details := ", ".join(line for line in (*session.description.splitlines(), session.location) if line):
+                print(f"     {details}")
+        # Anything but a usual day, to compare with what the portal's Agenda shows.
+        for part in parts:
+            usual = (part.get("plannedAttendanceSubCode") or {}).get("code") == "planned"
+            if not usual or part.get("bookingType") or part.get("toConfirmProduct"):
+                fields = {k: v for k, v in part.items() if v not in (None, False, [])}
+                print(f"   Not a usual day: {json.dumps(fields)}")
 
 
 if __name__ == "__main__":

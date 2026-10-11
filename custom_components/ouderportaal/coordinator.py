@@ -18,6 +18,7 @@ from homeassistant.util import dt as dt_util
 from .api import OuderportaalAuthError, OuderportaalClient, OuderportaalError
 from .archive import PhotoArchive
 from .const import (
+    AUTH_AGENDA,
     AUTH_MESSAGES,
     AUTH_NEWS,
     AUTH_NEWSLETTERS,
@@ -32,8 +33,13 @@ from .const import (
     EVENT_NEW_ENTRY,
     MESSAGES_POLL_DAYS,
     NIGHT_UPDATE_INTERVAL,
+    SCHEDULE_FUTURE_DAYS,
+    SCHEDULE_PAST_DAYS,
+    SCHEDULE_REQUEST_DAYS,
+    SCHEDULE_UPDATE_INTERVAL,
     STORAGE_VERSION,
 )
+from .schedule import Session, parse_schedule
 from .timeline import (
     Message,
     Moment,
@@ -92,6 +98,10 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
         # The portal's own unread counts ('messages', 'news', 'newsletters'); None until read once.
         self.unread_counts: dict[str, int] | None = None
         self._messages_failing = False
+        # The children's planned sessions on the portal's Agenda, earliest first.
+        self.schedule: list[Session] = []
+        self._schedule_read_at: datetime | None = None
+        self._schedule_failing = False
 
     async def _async_setup(self) -> None:
         try:
@@ -138,6 +148,7 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
             await self._announce_messages(messages)
             timeline.messages = messages
             await self._update_unread()
+        await self._update_schedule()
 
         await self._add_to_history(timeline)
         return self.history
@@ -169,6 +180,43 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
         self._messages_failing = False
         messages.sort(key=lambda m: m.sent, reverse=True)
         return messages
+
+    @property
+    def has_schedule(self) -> bool:
+        """Whether the portal shows this account its Agenda."""
+        return not AUTH_AGENDA.isdisjoint(self.authorizations)
+
+    async def _update_schedule(self) -> None:
+        """Read the schedule if it is due.
+
+        Like messages, the schedule is an extra: when it fails, the last one read stays and the rest of the update goes
+        through.
+        """
+        now = dt_util.now()
+        if not self.has_schedule or (
+            self._schedule_read_at is not None and now - self._schedule_read_at < SCHEDULE_UPDATE_INTERVAL
+        ):
+            return
+        start = now.date() - timedelta(days=SCHEDULE_PAST_DAYS)
+        end = now.date() + timedelta(days=SCHEDULE_FUTURE_DAYS)
+        days: list[dict[str, Any]] = []
+        try:
+            while start <= end:
+                until = min(start + timedelta(days=SCHEDULE_REQUEST_DAYS - 1), end)
+                days += await self.client.get_schedule(start, until)
+                start = until + timedelta(days=1)
+        except OuderportaalAuthError as err:
+            raise ConfigEntryAuthFailed(str(err)) from err
+        except OuderportaalError as err:
+            if not self._schedule_failing:
+                _LOGGER.warning("Could not read the schedule, will keep trying: %s", err)
+            self._schedule_failing = True
+            return
+        if self._schedule_failing:
+            _LOGGER.info("Reading the schedule works again")
+        self._schedule_failing = False
+        self.schedule = parse_schedule(days, dt_util.get_default_time_zone())
+        self._schedule_read_at = now
 
     async def _update_unread(self) -> None:
         try:
