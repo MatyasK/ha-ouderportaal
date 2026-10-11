@@ -2,7 +2,7 @@
 
     uv run --no-project --with aiohttp python scripts/try_portal.py mijnopvang you@example.com
 
-Asks for your password, logs in, forces a token refresh, and prints today's moments.
+Asks for your password, logs in, forces a token refresh, and prints the latest moments and the Messages page.
 Nothing is stored.
 """
 
@@ -13,6 +13,7 @@ import getpass
 import importlib.util
 import sys
 import time
+from datetime import date, timedelta
 from pathlib import Path
 from types import ModuleType
 from zoneinfo import ZoneInfo
@@ -36,7 +37,11 @@ def _load(name: str) -> ModuleType:
 
 
 OuderportaalClient = _load("api").OuderportaalClient
-parse_timeline = _load("timeline").parse_timeline
+_timeline = _load("timeline")
+parse_timeline = _timeline.parse_timeline
+parse_messages = _timeline.parse_messages
+parse_news = _timeline.parse_news
+parse_newsletters = _timeline.parse_newsletters
 
 
 async def main(portal: str, username: str) -> None:
@@ -62,6 +67,28 @@ async def main(portal: str, username: str) -> None:
         unknown = sorted({m.icon for m in timeline.moments if m.category == "activity"})
         if unknown:
             print(f"   Icons mapped to 'activity': {', '.join(unknown)}")
+
+        mailbox = sorted(a for a in await client.get_authorizations() if "NEWS" in a or "LOGBOOK" in a)
+        print(f"5. Messages page, last 30 days (permissions: {', '.join(mailbox)})")
+        today = date.today()
+        start, end = today - timedelta(days=30), today + timedelta(days=1)
+        messages = []
+        for name, fetch, parse in (
+            ("conversations", client.get_messages, parse_messages),
+            ("news", client.get_news, parse_news),
+            ("newsletters", client.get_newsletters, parse_newsletters),
+        ):
+            items = await fetch(start, end)
+            understood = parse(items, ZoneInfo("Europe/Amsterdam"))
+            print(f"   {name}: {len(items)} items, {len(understood)} understood")
+            if items:
+                print(f"     Fields: {', '.join(sorted(items[0]))}")
+            messages += understood
+        for message in sorted(messages, key=lambda m: m.sent, reverse=True):
+            unread = "*" if message.unread else " "
+            print(f"   {message.sent:%Y-%m-%d %H:%M} {unread} [{message.message_type:>15}] {message.subject}")
+        counts = await client.get_notifications()
+        print(f"   Unread according to the portal: {counts}")
 
 
 if __name__ == "__main__":

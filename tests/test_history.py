@@ -189,8 +189,19 @@ async def test_websocket_returns_days_newest_first(hass: HomeAssistant, entry, m
     (child,) = result["children"]
     assert child["id"] == CHILD_ID
     assert child["name"] == "Sam"
-    assert [d["date"] for d in child["days"]] == ["2026-10-07", "2026-10-06"]
+    # 2026-10-05 and 2026-10-02 only have news and newsletters, which are for the whole family.
+    assert [d["date"] for d in child["days"]] == ["2026-10-07", "2026-10-06", "2026-10-05", "2026-10-02"]
     today = child["days"][0]
+    assert [m["subject"] for m in today["messages"]] == ["Uitje naar de kinderboerderij"]
+    assert today["messages"][0]["key"] == "message-msg-trip"
+    assert today["messages"][0]["author"] == "Tommie"
+    assert today["messages"][0]["child_names"] == ["Sam"]
+    assert today["messages"][0]["url"] == "https://mijnopvang.ouderportaal.nl/parent/#/tabs/mailbox"
+    assert [(m["message_type"], m["subject"]) for m in child["days"][2]["messages"]] == [
+        ("newsletter", "Samen voor de beste kwaliteit - Deel uw ervaring!"),
+        ("news", "Sluitingsdag 24 oktober"),
+    ]
+    assert [m["message_type"] for m in child["days"][3]["messages"]] == ["service_message"]
     assert [m["title"] for m in today["moments"]] == [
         "09:00 (Fles)voeding",
         "10:10-10:48 Slapen",

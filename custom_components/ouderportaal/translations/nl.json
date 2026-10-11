@@ -35,18 +35,45 @@
   },
   "entity": {
     "calendar": {
-      "day_rhythm": { "name": "Dagritme" }
+      "day_rhythm": {
+        "name": "Dagritme"
+      }
     },
     "image": {
-      "latest_photo": { "name": "Laatste foto" }
+      "latest_photo": {
+        "name": "Laatste foto"
+      }
     },
     "sensor": {
-      "last_activity": { "name": "Laatste activiteit" },
-      "last_bottle": { "name": "Laatste fles" },
-      "last_diaper": { "name": "Laatste luier" },
-      "last_sleep": { "name": "Laatste slaapje" },
-      "milk_today": { "name": "Melk vandaag" },
-      "sleep_today": { "name": "Slaap vandaag" }
+      "last_activity": {
+        "name": "Laatste activiteit"
+      },
+      "last_bottle": {
+        "name": "Laatste fles"
+      },
+      "last_diaper": {
+        "name": "Laatste luier"
+      },
+      "last_sleep": {
+        "name": "Laatste slaapje"
+      },
+      "milk_today": {
+        "name": "Melk vandaag"
+      },
+      "sleep_today": {
+        "name": "Slaap vandaag"
+      },
+      "unread_messages": {
+        "name": "Ongelezen berichten"
+      },
+      "latest_message": {
+        "name": "Laatste bericht"
+      }
+    }
+  },
+  "device": {
+    "mailbox": {
+      "name": "Ouderportaal berichten"
     }
   }
 }

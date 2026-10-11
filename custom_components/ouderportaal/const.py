@@ -7,7 +7,7 @@ DOMAIN: Final = "ouderportaal"
 
 CONF_PORTAL: Final = "portal"
 
-# Fired once per new day-rhythm moment or new photo.
+# Fired once per new day-rhythm moment, batch of photos or message.
 EVENT_NEW_ENTRY: Final = "ouderportaal_new_entry"
 
 # Poll often while the daycare is open, rarely at night.
@@ -18,6 +18,14 @@ NIGHT_UPDATE_INTERVAL: Final = timedelta(hours=1)
 
 STORAGE_VERSION: Final = 1
 
+# Each poll lists the Messages page items of this many recent days; a reply moves a conversation's date forward.
+MESSAGES_POLL_DAYS: Final = 7
+
+# The portal shows each part of its Messages page only to accounts with this system function.
+AUTH_MESSAGES: Final = "WEB_PARENT_LOGBOOK"
+AUTH_NEWS: Final = "WEB_HTML_NEWS_VIEW"
+AUTH_NEWSLETTERS: Final = "WEB_ONLY_HTML_NEWSLETTER_ARCHIVE"
+
 # Photos are saved under <media>/ouderportaal/<date>/.
 ARCHIVE_DIR: Final = "ouderportaal"
 MAX_PARALLEL_DOWNLOADS: Final = 3
@@ -25,7 +33,8 @@ MAX_PARALLEL_DOWNLOADS: Final = 3
 # On first setup, import this much history by paging back through the timeline.
 BACKFILL_DAYS: Final = 30
 BACKFILL_MAX_PAGES: Final = 100
-# Bump to run the import again on existing installs (2: fixed paging, which is by card offset).
-BACKFILL_VERSION: Final = 2
+# Bump to run the import again on existing installs
+# (2: fixed paging, which is by card offset; 3: messages; 4: news and newsletters).
+BACKFILL_VERSION: Final = 4
 # Pause between pages, to stay gentle on the portal.
 BACKFILL_PAGE_DELAY_S: Final = 1.0

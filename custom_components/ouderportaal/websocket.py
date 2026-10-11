@@ -1,6 +1,6 @@
 """Websocket API for a timeline card: `{"type": "ouderportaal/timeline"}`.
 
-Returns per child the days (newest first) with their moments and photos. Photo URLs point at the saved
+Returns per child the days (newest first) with their moments, photos and messages. Photo URLs point at the saved
 copies under /media/local/...; a card signs them with `auth/sign_path` before using them in an <img>.
 """
 
@@ -16,7 +16,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .coordinator import OuderportaalCoordinator
-from .timeline import Moment, Photo
+from .timeline import Message, Moment, Photo
 
 
 @callback
@@ -30,6 +30,14 @@ def _moment(moment: Moment) -> dict[str, Any]:
         "title": moment.title,
         "text": moment.text,
         "duration_minutes": moment.duration_minutes,
+    }
+
+
+def _message(coordinator: OuderportaalCoordinator, message: Message) -> dict[str, Any]:
+    return message.to_dict() | {
+        "key": message.key,
+        "child_names": [coordinator.child_name(c) for c in message.child_ids],
+        "url": f"{coordinator.client.base_url}/parent/#/tabs/mailbox",
     }
 
 
@@ -65,7 +73,7 @@ async def ws_timeline(hass: HomeAssistant, connection: websocket_api.ActiveConne
             days: dict[str, dict[str, Any]] = {}
 
             def day(iso: str, days: dict[str, dict[str, Any]] = days) -> dict[str, Any]:
-                return days.setdefault(iso, {"date": iso, "moments": [], "photos": []})
+                return days.setdefault(iso, {"date": iso, "moments": [], "photos": [], "messages": []})
 
             for moment in history.moments:
                 if moment.child_id == child.id and moment.day >= since:
@@ -73,6 +81,10 @@ async def ws_timeline(hass: HomeAssistant, connection: websocket_api.ActiveConne
             for photo in history.photos:
                 if child.id in photo.child_ids and photo.day >= since:
                     day(photo.day.isoformat())["photos"].append(_photo(coordinator, photo, saved))
+            # Messages without children are for the whole family, so they show for every child.
+            for message in history.messages:
+                if (not message.child_ids or child.id in message.child_ids) and message.day >= since:
+                    day(message.day.isoformat())["messages"].append(_message(coordinator, message))
             children.append(
                 {
                     "id": child.id,

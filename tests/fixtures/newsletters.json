@@ -1,0 +1,27 @@
+{
+  "result": true,
+  "payload": {
+    "moreItems": false,
+    "newsletterItems": [
+      {
+        "generatedHtmlNewsLetterId": "nl-survey",
+        "sendDate": 1791188700000,
+        "mailSubject": "Samen voor de beste kwaliteit - Deel uw ervaring!",
+        "contentSnippet": "< English version below> Beste ouder(s), Op woensdag ontvangt u per mail een uitnodiging voor de Verbetermeter. In onze eerdere nieuwsbrief hebben we u geïnformeerd over deze meting.",
+        "fullSource": null,
+        "newsLetterType": "newsletter",
+        "unread": true
+      },
+      {
+        "generatedHtmlNewsLetterId": "nl-rates",
+        "sendDate": 1790924700000,
+        "mailSubject": "Tarieven 2027",
+        "contentSnippet": "Beste ouder, De tarieven voor 2027 zijn bekend.",
+        "fullSource": null,
+        "newsLetterType": "servicemessage",
+        "unread": false
+      }
+    ]
+  },
+  "messages": null
+}

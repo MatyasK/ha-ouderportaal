@@ -5,6 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from datetime import date
 
 import aiohttp
 import pytest
@@ -76,6 +77,17 @@ class FakePortal:
             return web.json_response({}, status=self.timeline_status)
         return web.json_response(load_fixture("timeline.json"))
 
+    def serve(self, fixture: str):
+        """A GET endpoint answering with a fixture, recording the path and query it was asked for."""
+
+        async def handler(request: web.Request) -> web.Response:
+            self.calls.append(request.path_qs.removeprefix("/restservices-parent"))
+            if not self._authorized(request):
+                return web.json_response({}, status=401)
+            return web.json_response(load_fixture(fixture))
+
+        return handler
+
 
 @pytest.fixture
 def portal() -> FakePortal:
@@ -89,6 +101,11 @@ async def client(portal: FakePortal) -> AsyncIterator[OuderportaalClient]:
     app.router.add_put("/auth-api/token", portal.token)
     app.router.add_get("/restservices-parent/children/", portal.children)
     app.router.add_get("/restservices-parent/timeline/cards/v2/{page}", portal.timeline)
+    app.router.add_get("/restservices-parent/parent/authorizations", portal.serve("authorizations.json"))
+    # The real portal answers the logbook overview with a bare list, the others with the usual envelope.
+    app.router.add_get("/restservices-parent/logbook/overview", portal.serve("messages.json"))
+    app.router.add_get("/restservices-parent/htmlnews/view", portal.serve("news.json"))
+    app.router.add_get("/restservices-parent/newsletter", portal.serve("newsletters.json"))
     server = TestServer(app)
     await server.start_server()
     async with aiohttp.ClientSession(cookie_jar=aiohttp.DummyCookieJar()) as session:
@@ -103,6 +120,27 @@ async def test_logs_in_and_unwraps_payload(client: OuderportaalClient, portal: F
 
     assert [c["firstName"] for c in children] == ["Sam"]
     assert portal.calls == ["login", "children"]
+
+
+async def test_reads_the_messages_page(client: OuderportaalClient, portal: FakePortal) -> None:
+    start, end = date(2026, 9, 30), date(2026, 10, 8)
+
+    authorizations = await client.get_authorizations()
+    messages = await client.get_messages(start, end)
+    news = await client.get_news(start, end)
+    newsletters = await client.get_newsletters(start, end)
+
+    assert {"WEB_PARENT_LOGBOOK", "WEB_HTML_NEWS_VIEW", "WEB_ONLY_HTML_NEWSLETTER_ARCHIVE"} <= authorizations
+    assert [m["logMessageMessageId"] for m in messages] == ["msg-trip", "msg-pacifier"]
+    assert [n["id"] for n in news] == ["news-closed"]
+    assert [n["generatedHtmlNewsLetterId"] for n in newsletters] == ["nl-survey", "nl-rates"]
+    assert portal.calls == [
+        "login",
+        "/parent/authorizations",
+        "/logbook/overview?from=20260930&to=20261008",
+        "/htmlnews/view?from=20260930&to=20261008",
+        "/newsletter?from=20260930&to=20261008",
+    ]
 
 
 async def test_reuses_token_while_valid(client: OuderportaalClient, portal: FakePortal) -> None:

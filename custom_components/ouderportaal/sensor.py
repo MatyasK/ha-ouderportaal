@@ -15,12 +15,15 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import UnitOfTime, UnitOfVolume
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
+from .const import DOMAIN
 from .coordinator import OuderportaalConfigEntry, OuderportaalCoordinator
 from .entity import OuderportaalEntity
-from .timeline import Moment
+from .timeline import Message, Moment
 
 MAX_STATE_LENGTH = 255
 
@@ -127,6 +130,7 @@ async def async_setup_entry(
         for child_id in coordinator.children
         for description in SENSORS
     )
+    async_add_entities([UnreadMessagesSensor(coordinator), LatestMessageSensor(coordinator)])
 
 
 class OuderportaalSensor(OuderportaalEntity, SensorEntity):
@@ -148,3 +152,77 @@ class OuderportaalSensor(OuderportaalEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         return self.entity_description.attrs_fn(self.moments)
+
+
+class OuderportaalMailboxSensor(CoordinatorEntity[OuderportaalCoordinator], SensorEntity):
+    """Messages belong to the account, not to one child: they get their own 'Mailbox' device."""
+
+    _attr_has_entity_name = True
+
+    def __init__(self, coordinator: OuderportaalCoordinator, key: str) -> None:
+        super().__init__(coordinator)
+        entry = coordinator.config_entry
+        self._attr_unique_id = f"{entry.entry_id}_{key}"
+        self._attr_translation_key = key
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, f"{entry.entry_id}_mailbox")},
+            translation_key="mailbox",
+            manufacturer="Konnect",
+            model="Ouderportaal",
+            configuration_url=f"{coordinator.client.base_url}/parent/#/tabs/mailbox",
+            entry_type=DeviceEntryType.SERVICE,
+        )
+
+
+class UnreadMessagesSensor(OuderportaalMailboxSensor):
+    """The badge on the portal's Messages tab: unread conversations, news and newsletters together."""
+
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator: OuderportaalCoordinator) -> None:
+        super().__init__(coordinator, "unread_messages")
+
+    @property
+    def native_value(self) -> int | None:
+        counts = self.coordinator.unread_counts
+        return sum(counts.values()) if counts is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return dict(self.coordinator.unread_counts or {})
+
+
+class LatestMessageSensor(OuderportaalMailboxSensor):
+    """The top of the portal's Messages page, whatever kind of item it is."""
+
+    def __init__(self, coordinator: OuderportaalCoordinator) -> None:
+        super().__init__(coordinator, "latest_message")
+
+    @property
+    def _latest(self) -> Message | None:
+        return self.coordinator.data.messages[0] if self.coordinator.data.messages else None
+
+    @property
+    def native_value(self) -> str | None:
+        message = self._latest
+        if message is None:
+            return None
+        return (message.subject or message.preview)[:MAX_STATE_LENGTH] or None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        message = self._latest
+        if message is None:
+            return {}
+        return {
+            "message_type": message.message_type,
+            "message_id": message.id,
+            "subject": message.subject,
+            "preview": message.preview,
+            "author": message.author,
+            "from_parent": message.from_parent,
+            "has_attachment": message.has_attachment,
+            "sent": message.sent,
+            "unread": message.unread,
+            "child_names": [self.coordinator.child_name(c) for c in message.child_ids],
+        }

@@ -1,0 +1,17 @@
+{
+  "result": true,
+  "payload": {
+    "systemFunctions": [
+      "WEB_PHOTOS_RECENT",
+      "WEB_JOURNAL_PARENT_VIEW",
+      "WEB_PARENT_LOGBOOK",
+      "WEB_HTML_NEWS_VIEW",
+      "WEB_PARENT_BOOKING_OVERVIEW",
+      "WEB_ONLY_HTML_NEWSLETTER_ARCHIVE"
+    ],
+    "configCanWriteLogMessageForAChild": true,
+    "hasActiveChildren": true,
+    "childrenWithAccessToChildDocuments": ["c0ffee00c0ffee00c0ffee00c0ffee00"]
+  },
+  "messages": null
+}

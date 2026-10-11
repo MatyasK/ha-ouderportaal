@@ -1,4 +1,4 @@
-"""Parse timeline cards into moments (day rhythm entries) and photos.
+"""Parse timeline cards into moments (day rhythm entries) and photos, and the portal's Messages page into messages.
 
 Kept free of Home Assistant imports so it can be tested standalone.
 
@@ -18,7 +18,8 @@ from __future__ import annotations
 
 import hashlib
 import re
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, tzinfo
 from html.parser import HTMLParser
 from pathlib import PurePosixPath
@@ -51,7 +52,14 @@ _CATEGORY_PREFIXES: tuple[tuple[str, str], ...] = (
 CATEGORY_NOTE = "note"
 CATEGORY_ACTIVITY = "activity"
 
+# The kinds of item on the portal's Messages page.
+MESSAGE = "message"
+NEWS = "news"
+NEWSLETTER = "newsletter"
+SERVICE_MESSAGE = "service_message"
+
 _TITLE_RE = re.compile(r"^(\d{1,2}):(\d{2})(?:\s*-\s*(\d{1,2}):(\d{2}))?\s*(.*)$")
+_WHITESPACE_RE = re.compile(r"\s+")
 _AMOUNT_RE = re.compile(r"(\d+(?:[.,]\d+)?)\s*(?:cc|ml)\b", re.IGNORECASE)
 
 
@@ -189,15 +197,82 @@ class Photo:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class Message:
+    """An item on the portal's Messages page: a conversation, news item, newsletter or service message.
+
+    A conversation keeps its id when replies are added; its text, author and date are those of the latest message.
+    News and newsletters only come with a snippet of their text.
+    """
+
+    id: str
+    subject: str
+    preview: str
+    sent: datetime
+    unread: bool
+    child_ids: tuple[str, ...]
+    message_type: str = MESSAGE
+    author: str = ""
+    # The latest message in the conversation was written by a parent: you, or the other parent.
+    from_parent: bool = False
+    has_attachment: bool = False
+
+    @property
+    def key(self) -> str:
+        """Unique across the kinds of item, like the portal's own 'message-<id>' and 'news-<id>'."""
+        return f"{self.message_type}-{self.id}"
+
+    @property
+    def day(self) -> date:
+        return self.sent.date()
+
+    @property
+    def fingerprint(self) -> str:
+        """Changes when a reply arrives; not when it is read, so reading does not trigger notifications."""
+        return _digest(f"{self.sent.isoformat()}|{self.preview}")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "message_type": self.message_type,
+            "subject": self.subject,
+            "preview": self.preview,
+            "sent": self.sent.isoformat(),
+            "unread": self.unread,
+            "child_ids": list(self.child_ids),
+            "author": self.author,
+            "from_parent": self.from_parent,
+            "has_attachment": self.has_attachment,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Message:
+        # Stores from before news and newsletters only hold conversations, without the newer fields.
+        return cls(
+            id=data["id"],
+            subject=data["subject"],
+            preview=data["preview"],
+            sent=datetime.fromisoformat(data["sent"]),
+            unread=data["unread"],
+            child_ids=tuple(data["child_ids"]),
+            message_type=data.get("message_type", MESSAGE),
+            author=data.get("author", ""),
+            from_parent=data.get("from_parent", False),
+            has_attachment=data.get("has_attachment", False),
+        )
+
+
 @dataclass(slots=True)
 class Timeline:
     moments: list[Moment]
     photos: list[Photo]
+    messages: list[Message] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "moments": [m.to_dict() for m in self.moments],
             "photos": [p.to_dict() for p in self.photos],
+            "messages": [m.to_dict() for m in self.messages],
         }
 
     @classmethod
@@ -205,6 +280,7 @@ class Timeline:
         return cls(
             moments=[Moment.from_dict(m) for m in data.get("moments", [])],
             photos=[Photo.from_dict(p) for p in data.get("photos", [])],
+            messages=[Message.from_dict(m) for m in data.get("messages", [])],
         )
 
 
@@ -217,9 +293,108 @@ def merge_timelines(history: Timeline, fresh: Timeline, *, since: date | None = 
     moments.update((m.key, m) for m in fresh.moments if since is None or m.day >= since)
     photos = {p.id: p for p in fresh.photos if since is None or p.day >= since}
     photos.update((p.id, p) for p in history.photos if p.id not in photos)
+    messages = {m.key: m for m in history.messages}
+    messages.update((m.key, m) for m in fresh.messages if since is None or m.day >= since)
     return Timeline(
         moments=sorted(moments.values(), key=_moment_sort_key),
         photos=sorted(photos.values(), key=lambda p: p.day, reverse=True),
+        messages=sorted(messages.values(), key=lambda m: m.sent, reverse=True),
+    )
+
+
+def _parse_sent(value: Any, tz: tzinfo) -> datetime | None:
+    """The portal sends dates as epoch milliseconds or ISO strings; accept both."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int | float):
+        return datetime.fromtimestamp(value / 1000, tz)
+    if isinstance(value, str) and value:
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            return None
+        return parsed if parsed.tzinfo else parsed.replace(tzinfo=tz)
+    return None
+
+
+def parse_messages(items: list[dict[str, Any]], tz: tzinfo) -> list[Message]:
+    """Conversations from /logbook/overview, newest first. Items without a usable date are skipped."""
+    return _parse_items(items, tz, "date", _conversation)
+
+
+def parse_news(items: list[dict[str, Any]], tz: tzinfo) -> list[Message]:
+    """News items from /htmlnews/view, newest first."""
+    return _parse_items(items, tz, "publishDate", _news_item)
+
+
+def parse_newsletters(items: list[dict[str, Any]], tz: tzinfo) -> list[Message]:
+    """Newsletters and service messages from /newsletter, newest first."""
+    return _parse_items(items, tz, "sendDate", _newsletter)
+
+
+def _parse_items(
+    items: list[dict[str, Any]], tz: tzinfo, date_field: str, build: Callable[[dict[str, Any], datetime], Message]
+) -> list[Message]:
+    messages = []
+    for item in items:
+        if isinstance(item, dict) and (sent := _parse_sent(item.get(date_field), tz)) is not None:
+            messages.append(build(item, sent))
+    messages.sort(key=lambda m: m.sent, reverse=True)
+    return messages
+
+
+def _source_id(item: dict[str, Any], fields: tuple[str, ...], sent: datetime, subject: str) -> str:
+    """The item's id, with the same fallbacks as the portal's own app."""
+    for name in fields:
+        if item.get(name):
+            return str(item[name])
+    return f"{sent.isoformat()}-{subject}"
+
+
+def _conversation(item: dict[str, Any], sent: datetime) -> Message:
+    subject = _clean(item.get("subject") or "")
+    return Message(
+        id=_source_id(item, ("logMessageMessageId", "logbookMessageId", "logMessageId", "id"), sent, subject),
+        subject=subject,
+        # The whole latest message, as HTML.
+        preview=html_to_text(item.get("message") or ""),
+        sent=sent,
+        # null rather than false when the latest message is from a parent.
+        unread=bool(item.get("unread")),
+        child_ids=_child_ids(item),
+        message_type=MESSAGE,
+        # The group for messages from the daycare, the parent's name for theirs.
+        author=_clean(item.get("lastWritten") or ""),
+        from_parent=bool(item.get("lastFromParent")),
+    )
+
+
+def _news_item(item: dict[str, Any], sent: datetime) -> Message:
+    subject = _clean(item.get("title") or "")
+    return Message(
+        id=_source_id(item, ("id", "htmlNewsId", "htmlNewsItemId", "newsItemId"), sent, subject),
+        subject=subject,
+        preview=_clean(item.get("contentSnippet") or ""),
+        sent=sent,
+        unread=bool(item.get("isNew")),
+        child_ids=(),
+        message_type=NEWS,
+        has_attachment=bool(item.get("containsAttachment")),
+    )
+
+
+def _newsletter(item: dict[str, Any], sent: datetime) -> Message:
+    subject = _clean(item.get("mailSubject") or "")
+    service = str(item.get("newsLetterType") or "").lower() == "servicemessage"
+    return Message(
+        id=_source_id(item, ("generatedHtmlNewsLetterId", "id"), sent, subject),
+        subject=subject,
+        # Plain text, cut off after about 500 characters.
+        preview=_clean(item.get("contentSnippet") or ""),
+        sent=sent,
+        unread=bool(item.get("unread")),
+        child_ids=(),
+        message_type=SERVICE_MESSAGE if service else NEWSLETTER,
     )
 
 
@@ -292,15 +467,23 @@ class _DayRhythmParser(HTMLParser):
 
 
 class _TextParser(HTMLParser):
+    """Text as the portal shows it: line breaks in the HTML source are spaces; <br> and blocks start a new line."""
+
+    _BREAKS: ClassVar[set[str]] = {"br", "p", "div", "li"}
+
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.parts: list[str] = []
 
     def handle_data(self, data: str) -> None:
-        self.parts.append(data)
+        self.parts.append(_WHITESPACE_RE.sub(" ", data))
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in ("br", "p", "div", "li"):
+        if tag in self._BREAKS:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in self._BREAKS:
             self.parts.append("\n")
 
 
@@ -351,8 +534,9 @@ def _card_day(card: dict[str, Any], tz: tzinfo) -> date:
     return datetime.fromtimestamp(card["date"] / 1000, tz).date()
 
 
-def _card_child_ids(card: dict[str, Any]) -> tuple[str, ...]:
-    return tuple(child["id"] for child in card.get("children") or [] if child.get("id"))
+def _child_ids(item: dict[str, Any]) -> tuple[str, ...]:
+    """The 'children' of a timeline card or conversation."""
+    return tuple(child["id"] for child in item.get("children") or [] if isinstance(child, dict) and child.get("id"))
 
 
 def parse_timeline(cards: list[dict[str, Any]], tz: tzinfo) -> Timeline:
@@ -365,7 +549,7 @@ def parse_timeline(cards: list[dict[str, Any]], tz: tzinfo) -> Timeline:
             continue
         day = _card_day(card, tz)
         if card_type == "journal" and (journal := card.get("journal")):
-            child_ids = (journal["childId"],) if journal.get("childId") else _card_child_ids(card)
+            child_ids = (journal["childId"],) if journal.get("childId") else _child_ids(card)
             for child_id in child_ids:
                 moments.extend(parse_day_rhythm(journal.get("dayRythmContent") or "", child_id, day, tz))
                 if note := html_to_text(journal.get("journalContent") or ""):
@@ -391,7 +575,7 @@ def parse_timeline(cards: list[dict[str, Any]], tz: tzinfo) -> Timeline:
                 photos.append(
                     Photo(
                         id=photo["id"],
-                        child_ids=tagged or _card_child_ids(card),
+                        child_ids=tagged or _child_ids(card),
                         day=day,
                         description=photo.get("description") or "",
                         media_type=media_type,
