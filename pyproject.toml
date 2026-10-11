@@ -1,6 +1,7 @@
 [project]
 name = "ha-ouderportaal"
-version = "0.1.0"
+# Required by uv; the integration's version is in custom_components/ouderportaal/manifest.json.
+version = "0"
 description = "Home Assistant integration for Konnect ouderportaal daycare portals"
 requires-python = ">=3.13"
 

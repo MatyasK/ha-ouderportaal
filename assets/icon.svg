@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Source of custom_components/ouderportaal/brand/icon.png (256 px) and icon@2x.png (512 px). -->
+  <!-- A house for the daycare, with a bottle for the day rhythm. -->
+  <path d="M256 27 L488 215 L488 485 L24 485 L24 215 Z" fill="#2a9d8f" stroke="#2a9d8f" stroke-width="48" stroke-linejoin="round"/>
+  <g transform="translate(256 292) scale(1.15) translate(-256 -300)">
+    <path d="M220 214 C220 190 238 186 240 174 C242 158 246 146 256 146 C266 146 270 158 272 174 C274 186 292 190 292 214 Z" fill="#ffffff"/>
+    <rect x="190" y="206" width="132" height="42" rx="12" fill="#ffffff"/>
+    <rect x="202" y="258" width="108" height="196" rx="34" fill="#ffffff"/>
+    <g stroke="#2a9d8f" stroke-width="12" stroke-linecap="round">
+      <line x1="226" y1="306" x2="256" y2="306"/>
+      <line x1="226" y1="346" x2="246" y2="346"/>
+      <line x1="226" y1="386" x2="256" y2="386"/>
+    </g>
+  </g>
+  <!-- generated with AI -->
+</svg>
