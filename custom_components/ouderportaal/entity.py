@@ -7,8 +7,18 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
 from .coordinator import OuderportaalCoordinator
-from .schedule import Session
 from .timeline import Moment, Photo
+
+
+def child_device_info(coordinator: OuderportaalCoordinator, child_id: str) -> DeviceInfo:
+    return DeviceInfo(
+        identifiers={(DOMAIN, child_id)},
+        name=coordinator.child_name(child_id),
+        manufacturer="Konnect",
+        model="Ouderportaal",
+        configuration_url=f"{coordinator.client.base_url}/parent/",
+        entry_type=DeviceEntryType.SERVICE,
+    )
 
 
 class OuderportaalEntity(CoordinatorEntity[OuderportaalCoordinator]):
@@ -19,14 +29,7 @@ class OuderportaalEntity(CoordinatorEntity[OuderportaalCoordinator]):
         self.child_id = child_id
         self._attr_unique_id = f"{child_id}_{key}"
         self._attr_translation_key = key
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, child_id)},
-            name=coordinator.child_name(child_id),
-            manufacturer="Konnect",
-            model="Ouderportaal",
-            configuration_url=f"{coordinator.client.base_url}/parent/",
-            entry_type=DeviceEntryType.SERVICE,
-        )
+        self._attr_device_info = child_device_info(coordinator, child_id)
 
     @property
     def moments(self) -> list[Moment]:
@@ -37,8 +40,3 @@ class OuderportaalEntity(CoordinatorEntity[OuderportaalCoordinator]):
     def photos(self) -> list[Photo]:
         """This child's photos, newest first."""
         return [p for p in self.coordinator.data.photos if self.child_id in p.child_ids]
-
-    @property
-    def schedule(self) -> list[Session]:
-        """This child's planned sessions, earliest first."""
-        return [s for s in self.coordinator.schedule if s.child_id == self.child_id]

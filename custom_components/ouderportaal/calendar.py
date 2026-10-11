@@ -7,10 +7,11 @@ from datetime import datetime, timedelta
 from homeassistant.components.calendar import CalendarEntity, CalendarEvent
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from .coordinator import OuderportaalConfigEntry
-from .entity import OuderportaalEntity
+from .coordinator import OuderportaalConfigEntry, OuderportaalCoordinator, ScheduleCoordinator
+from .entity import OuderportaalEntity, child_device_info
 from .schedule import Session
 from .timeline import Moment
 
@@ -27,8 +28,8 @@ async def async_setup_entry(
     entities: list[CalendarEntity] = [
         OuderportaalCalendar(coordinator, child_id, "day_rhythm") for child_id in coordinator.children
     ]
-    if coordinator.has_schedule:
-        entities += [ScheduleCalendar(coordinator, child_id, "schedule") for child_id in coordinator.children]
+    if coordinator.schedule is not None:
+        entities += [ScheduleCalendar(coordinator, child_id) for child_id in coordinator.children]
     async_add_entities(entities)
 
 
@@ -91,12 +92,27 @@ def _session_event(session: Session) -> CalendarEvent:
         summary=session.summary,
         description=session.description or None,
         location=session.location or None,
-        uid=f"{session.child_id}:{session.start.isoformat()}",
+        uid=f"{session.child_id}:{session.start.isoformat()}/{session.end.isoformat()}",
     )
 
 
-class ScheduleCalendar(OuderportaalEntity, CalendarEntity):
+class ScheduleCalendar(CoordinatorEntity[ScheduleCoordinator], CalendarEntity):
     """When the child is planned at daycare, from a month back to three months ahead; "on" while they are there."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "schedule"
+
+    def __init__(self, coordinator: OuderportaalCoordinator, child_id: str) -> None:
+        assert coordinator.schedule is not None
+        super().__init__(coordinator.schedule)
+        self.child_id = child_id
+        self._attr_unique_id = f"{child_id}_schedule"
+        self._attr_device_info = child_device_info(coordinator, child_id)
+
+    @property
+    def schedule(self) -> list[Session]:
+        """This child's planned sessions, earliest first."""
+        return [s for s in self.coordinator.data or [] if s.child_id == self.child_id]
 
     @property
     def event(self) -> CalendarEvent | None:

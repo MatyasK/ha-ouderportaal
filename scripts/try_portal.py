@@ -17,6 +17,7 @@ import time
 from datetime import date, timedelta
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import aiohttp
@@ -43,7 +44,18 @@ parse_timeline = _timeline.parse_timeline
 parse_messages = _timeline.parse_messages
 parse_news = _timeline.parse_news
 parse_newsletters = _timeline.parse_newsletters
-parse_schedule = _load("schedule").parse_schedule
+_schedule = _load("schedule")
+parse_schedule = _schedule.parse_schedule
+schedule_ranges = _schedule.schedule_ranges
+_const = _load("const")
+
+
+async def _raw_get(client: Any, path: str) -> tuple[int, Any]:
+    """GET a restservices-parent path without unwrapping the answer, so the portal's own messages show."""
+    token = await client._ensure_token()
+    headers = client._base_headers() | {"Authorization": f"Bearer {token}"}
+    async with client._session.get(f"{client.base_url}/restservices-parent{path}", headers=headers) as resp:
+        return resp.status, await resp.json(content_type=None) if resp.status == 200 else None
 
 
 async def main(portal: str, username: str) -> None:
@@ -92,8 +104,19 @@ async def main(portal: str, username: str) -> None:
         counts = await client.get_notifications()
         print(f"   Unread according to the portal: {counts}")
 
-        print("6. Schedule, the coming 4 weeks")
-        days = await client.get_schedule(today, today + timedelta(days=27))
+        print("6. Schedule, as the integration reads it: a month back to three months ahead, a month per request")
+        days = []
+        for start, end in schedule_ranges(
+            today, _const.SCHEDULE_PAST_DAYS, _const.SCHEDULE_FUTURE_DAYS, _const.SCHEDULE_REQUEST_DAYS
+        ):
+            status, answer = await _raw_get(client, f"/calendar/{start:%Y%m%d}/until/{end:%Y%m%d}")
+            answered = (answer or {}).get("payload") or {}
+            # The portal's own messages say, for example, how far ahead it shows the planning.
+            print(
+                f"   {start} until {end}: HTTP {status}, result={(answer or {}).get('result')}, "
+                f"{len(answered.get('days') or [])} days, messages={(answer or {}).get('messages')}"
+            )
+            days += answered.get("days") or []
         parts = [
             part
             for day in days
@@ -113,7 +136,7 @@ async def main(portal: str, username: str) -> None:
         for part in parts:
             usual = (part.get("plannedAttendanceSubCode") or {}).get("code") == "planned"
             if not usual or part.get("bookingType") or part.get("toConfirmProduct"):
-                fields = {k: v for k, v in part.items() if v not in (None, False, [])}
+                fields = {k: v for k, v in part.items() if v is not None and v is not False and v != []}
                 print(f"   Not a usual day: {json.dumps(fields)}")
 
 

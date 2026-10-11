@@ -35,12 +35,15 @@ Each time is called "Daycare", with what makes it different in brackets:
 | `Daycare (moved)` | A day moved to another group |
 | `Daycare (option)` | An option, not certain yet |
 | `Daycare (to confirm)` | A day the daycare asks you to confirm; `Daycare (confirmed)` once you have |
+| `Daycare (extra day, pending approval)` | A request the daycare has not approved yet; also `on hold` and `pending parent approval` |
 
 Absences (illness, vacation, a day swapped away) are left out, the way a calendar leaves out cancelled events, so the calendar is "on" only while your child is expected at daycare.
+Requests that were rejected, cancelled or expired are left out too.
 A morning and an afternoon on the same day are two events.
 When the portal knows them, the group and the status of a request are in the event's description, and the daycare's location in its location.
 
-The schedule is read every 30 minutes, so a change on the portal can take that long to show up.
+The schedule is read every 30 minutes, day and night, so a change on the portal can take that long to show up.
+If the Agenda cannot be read, the schedule calendar is unavailable until it can; the rest of the integration keeps working, and the other way around.
 Only accounts that see the Agenda on the portal get this calendar.
 
 ### Messages
