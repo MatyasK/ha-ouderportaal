@@ -256,5 +256,3 @@ Never commit HAR files or tokens: they contain your password and session.
 ## Credits
 
 The API was mapped with help from [konnect-cli](https://github.com/anneschuth/konnect-cli) and [Ouderportaal-Foto-Downloader](https://github.com/tangenent/Ouderportaal-Foto-Downloader) (both MIT).
-
----

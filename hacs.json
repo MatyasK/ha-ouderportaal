@@ -1,5 +1,6 @@
 {
   "name": "Ouderportaal (Konnect)",
   "homeassistant": "2025.3.0",
+  "country": "NL",
   "render_readme": true
 }
