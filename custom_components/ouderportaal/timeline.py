@@ -11,16 +11,19 @@ A day's journal card holds the day rhythm as HTML, one table per moment:
       <div class='moment-remarks'>20cc over</div>
     </table>
 
-The daycare keeps adding moments to the same card during the day.
+The daycare keeps adding moments to the same card during the day, and can correct or remove them.
+
+A field of an unexpected type counts as missing, so a surprise from the portal costs at most that card, photo or item.
 """
 
 from __future__ import annotations
 
 import hashlib
+import math
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date, datetime, time, tzinfo
+from datetime import date, datetime, time, timedelta, tzinfo
 from html.parser import HTMLParser
 from pathlib import PurePosixPath
 from typing import Any, ClassVar
@@ -87,8 +90,14 @@ class Moment:
 
     @property
     def key(self) -> str:
-        """Stable identity: a sleep that gets its end time later keeps its key."""
-        anchor = self.start.strftime("%H:%M") if self.start else _digest(self.label + self.description)
+        """Stable identity: a sleep that gets its end time later keeps its key, and so does a note that gets longer."""
+        if self.start:
+            anchor = self.start.strftime("%H:%M")
+        elif self.category == CATEGORY_NOTE:
+            # A journal card has one note.
+            anchor = CATEGORY_NOTE
+        else:
+            anchor = _digest(self.label + self.description)
         return f"{self.child_id}:{self.day.isoformat()}:{self.icon}:{anchor}"
 
     @property
@@ -161,9 +170,10 @@ class Photo:
     description: str
     media_type: str
     extension: str
-    full_url: str = ""
-    medium_url: str = ""
-    thumb_url: str = ""
+    # Signed, and expired within hours: not part of what the photo is, so not compared or stored.
+    full_url: str = field(default="", compare=False)
+    medium_url: str = field(default="", compare=False)
+    thumb_url: str = field(default="", compare=False)
 
     @property
     def filename(self) -> str:
@@ -267,6 +277,8 @@ class Timeline:
     moments: list[Moment]
     photos: list[Photo]
     messages: list[Message] = field(default_factory=list)
+    # The child and day of each journal card read: its moments are that day's whole day rhythm. Not stored.
+    journal_days: set[tuple[str, date]] = field(default_factory=set, compare=False)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -287,14 +299,21 @@ class Timeline:
 def merge_timelines(history: Timeline, fresh: Timeline, *, since: date | None = None) -> Timeline:
     """Add freshly fetched entries to the history; fresh data wins for entries seen before.
 
+    A fresh journal card replaces the moments the history has for its child and day, so an entry the daycare
+    corrected or removed is corrected or removed here too. Photos and messages stay, also when the portal drops them.
     Entries older than 'since' are left out of 'fresh' (used to limit the initial import).
     """
-    moments = {m.key: m for m in history.moments}
-    moments.update((m.key, m) for m in fresh.moments if since is None or m.day >= since)
-    photos = {p.id: p for p in fresh.photos if since is None or p.day >= since}
+
+    def wanted(day: date) -> bool:
+        return since is None or day >= since
+
+    replaced = {(child_id, day) for child_id, day in fresh.journal_days if wanted(day)}
+    moments = {m.key: m for m in history.moments if (m.child_id, m.day) not in replaced}
+    moments.update((m.key, m) for m in fresh.moments if wanted(m.day))
+    photos = {p.id: p for p in fresh.photos if wanted(p.day)}
     photos.update((p.id, p) for p in history.photos if p.id not in photos)
     messages = {m.key: m for m in history.messages}
-    messages.update((m.key, m) for m in fresh.messages if since is None or m.day >= since)
+    messages.update((m.key, m) for m in fresh.messages if wanted(m.day))
     return Timeline(
         moments=sorted(moments.values(), key=_moment_sort_key),
         photos=sorted(photos.values(), key=lambda p: p.day, reverse=True),
@@ -304,10 +323,8 @@ def merge_timelines(history: Timeline, fresh: Timeline, *, since: date | None = 
 
 def _parse_sent(value: Any, tz: tzinfo) -> datetime | None:
     """The portal sends dates as epoch milliseconds or ISO strings; accept both."""
-    if isinstance(value, bool):
-        return None
     if isinstance(value, int | float):
-        return datetime.fromtimestamp(value / 1000, tz)
+        return _epoch(value, tz)
     if isinstance(value, str) and value:
         try:
             parsed = datetime.fromisoformat(value)
@@ -346,35 +363,35 @@ def _parse_items(
 def _source_id(item: dict[str, Any], fields: tuple[str, ...], sent: datetime, subject: str) -> str:
     """The item's id, with the same fallbacks as the portal's own app."""
     for name in fields:
-        if item.get(name):
-            return str(item[name])
+        if source_id := _id(item.get(name)):
+            return source_id
     return f"{sent.isoformat()}-{subject}"
 
 
 def _conversation(item: dict[str, Any], sent: datetime) -> Message:
-    subject = _clean(item.get("subject") or "")
+    subject = _str(item.get("subject"))
     return Message(
         id=_source_id(item, ("logMessageMessageId", "logbookMessageId", "logMessageId", "id"), sent, subject),
         subject=subject,
         # The whole latest message, as HTML.
-        preview=html_to_text(item.get("message") or ""),
+        preview=html_to_text(_raw_str(item.get("message"))),
         sent=sent,
         # null rather than false when the latest message is from a parent.
         unread=bool(item.get("unread")),
         child_ids=_child_ids(item),
         message_type=MESSAGE,
         # The group for messages from the daycare, the parent's name for theirs.
-        author=_clean(item.get("lastWritten") or ""),
+        author=_str(item.get("lastWritten")),
         from_parent=bool(item.get("lastFromParent")),
     )
 
 
 def _news_item(item: dict[str, Any], sent: datetime) -> Message:
-    subject = _clean(item.get("title") or "")
+    subject = _str(item.get("title"))
     return Message(
         id=_source_id(item, ("id", "htmlNewsId", "htmlNewsItemId", "newsItemId"), sent, subject),
         subject=subject,
-        preview=_clean(item.get("contentSnippet") or ""),
+        preview=_str(item.get("contentSnippet")),
         sent=sent,
         unread=bool(item.get("isNew")),
         child_ids=(),
@@ -384,13 +401,13 @@ def _news_item(item: dict[str, Any], sent: datetime) -> Message:
 
 
 def _newsletter(item: dict[str, Any], sent: datetime) -> Message:
-    subject = _clean(item.get("mailSubject") or "")
-    service = str(item.get("newsLetterType") or "").lower() == "servicemessage"
+    subject = _str(item.get("mailSubject"))
+    service = _str(item.get("newsLetterType")).lower() == "servicemessage"
     return Message(
         id=_source_id(item, ("generatedHtmlNewsLetterId", "id"), sent, subject),
         subject=subject,
         # Plain text, cut off after about 500 characters.
-        preview=_clean(item.get("contentSnippet") or ""),
+        preview=_str(item.get("contentSnippet")),
         sent=sent,
         unread=bool(item.get("unread")),
         child_ids=(),
@@ -418,8 +435,55 @@ def _clean(value: str) -> str:
     return " ".join(value.split())
 
 
+def _lines(value: str) -> str:
+    """Each line cleaned up, without the empty ones."""
+    return "\n".join(line for line in (_clean(line) for line in value.splitlines()) if line)
+
+
+def _raw_str(value: Any) -> str:
+    """A string as the portal sent it, such as HTML."""
+    return value if isinstance(value, str) else ""
+
+
+def _str(value: Any) -> str:
+    return _clean(_raw_str(value))
+
+
+def _id(value: Any) -> str:
+    """An id from the portal, as text; empty when there is none."""
+    if isinstance(value, bool) or not isinstance(value, str | int) or not value:
+        return ""
+    return str(value)
+
+
+def _dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _dicts(value: Any) -> list[dict[str, Any]]:
+    return [item for item in value if isinstance(item, dict)] if isinstance(value, list) else []
+
+
+def _epoch(value: Any, tz: tzinfo) -> datetime | None:
+    """Epoch milliseconds, as the portal sends times."""
+    if isinstance(value, bool) or not isinstance(value, int | float) or not math.isfinite(value):
+        return None
+    try:
+        return datetime.fromtimestamp(value / 1000, tz)
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+# Tags that start a new line on screen.
+_BREAKS = frozenset({"br", "p", "div", "li"})
+
+
 class _DayRhythmParser(HTMLParser):
-    """Collects the raw fields of each 'day-rythm-moment' table."""
+    """Collects the raw fields of each 'day-rythm-moment' table.
+
+    A field ends with the end tag of the element that holds it, so other markup in it, such as a <br>, which has no
+    end tag, cannot keep it open.
+    """
 
     _FIELDS: ClassVar[dict[str, str]] = {
         "moment-title-span": "title",
@@ -433,6 +497,8 @@ class _DayRhythmParser(HTMLParser):
         self.moments: list[dict[str, str]] = []
         self._current: dict[str, str] | None = None
         self._field: str | None = None
+        # The tag of the element holding the field, and how many elements with that tag are open.
+        self._field_tag = ""
         self._field_depth = 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
@@ -440,36 +506,43 @@ class _DayRhythmParser(HTMLParser):
         if tag == "table" and "day-rythm-moment" in classes:
             self._current = {"icon": "", "title": "", "subtitle": "", "description": "", "remarks": ""}
             self.moments.append(self._current)
+            self._field = None
             return
         if self._current is None:
             return
         if self._field:
-            self._field_depth += 1
+            self._break(tag)
+            if tag == self._field_tag:
+                self._field_depth += 1
             return
         for cls in classes:
             if cls.startswith(ICON_PREFIX) and cls not in ICON_IGNORE:
                 self._current["icon"] = cls.removeprefix(ICON_PREFIX)
             if field := self._FIELDS.get(cls):
-                self._field = field
-                self._field_depth = 1
+                self._field, self._field_tag, self._field_depth = field, tag, 1
 
     def handle_endtag(self, tag: str) -> None:
         if self._field:
-            self._field_depth -= 1
-            if self._field_depth == 0:
-                self._field = None
+            self._break(tag)
+            if tag == self._field_tag:
+                self._field_depth -= 1
+                if self._field_depth == 0:
+                    self._field = None
         elif tag == "table":
             self._current = None
 
     def handle_data(self, data: str) -> None:
         if self._current is not None and self._field:
-            self._current[self._field] += data
+            # Line breaks in the HTML source are spaces on screen.
+            self._current[self._field] += _WHITESPACE_RE.sub(" ", data)
+
+    def _break(self, tag: str) -> None:
+        if self._current is not None and self._field and tag in _BREAKS:
+            self._current[self._field] += "\n"
 
 
 class _TextParser(HTMLParser):
     """Text as the portal shows it: line breaks in the HTML source are spaces; <br> and blocks start a new line."""
-
-    _BREAKS: ClassVar[set[str]] = {"br", "p", "div", "li"}
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -479,19 +552,27 @@ class _TextParser(HTMLParser):
         self.parts.append(_WHITESPACE_RE.sub(" ", data))
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in self._BREAKS:
+        if tag in _BREAKS:
             self.parts.append("\n")
 
     def handle_endtag(self, tag: str) -> None:
-        if tag in self._BREAKS:
+        if tag in _BREAKS:
             self.parts.append("\n")
 
 
 def html_to_text(html: str) -> str:
     parser = _TextParser()
     parser.feed(html)
-    lines = (_clean(line) for line in "".join(parser.parts).splitlines())
-    return "\n".join(line for line in lines if line)
+    return _lines("".join(parser.parts))
+
+
+def _at(day: date, hours: str, minutes: str, tz: tzinfo) -> datetime | None:
+    """That time of the day; None for a time the clock does not have. '24:00' is the end of the day."""
+    if (hours, minutes) == ("24", "00"):
+        return datetime.combine(day + timedelta(days=1), time.min, tz)
+    if int(hours) > 23 or int(minutes) > 59:
+        return None
+    return datetime.combine(day, time(int(hours), int(minutes)), tz)
 
 
 def parse_day_rhythm(html: str, child_id: str, day: date, tz: tzinfo) -> list[Moment]:
@@ -502,13 +583,13 @@ def parse_day_rhythm(html: str, child_id: str, day: date, tz: tzinfo) -> list[Mo
         title = _clean(raw["title"])
         start = end = None
         label = title
-        if match := _TITLE_RE.match(title):
-            h1, m1, h2, m2, label = match.groups()
-            start = datetime.combine(day, time(int(h1), int(m1)), tz)
+        # A title whose start time does not exist stays whole, as an untimed moment.
+        if (match := _TITLE_RE.match(title)) and (start := _at(day, *match.group(1, 2), tz)):
+            h2, m2, label = match.group(3, 4, 5)
             if h2 is not None:
-                end = datetime.combine(day, time(int(h2), int(m2)), tz)
-        description = _clean(raw["description"])
-        remarks = _clean(raw["remarks"])
+                end = _at(day, h2, m2, tz)
+        description = _lines(raw["description"])
+        remarks = _lines(raw["remarks"])
         amount = None
         if match := _AMOUNT_RE.search(description):
             amount = float(match.group(1).replace(",", "."))
@@ -529,61 +610,74 @@ def parse_day_rhythm(html: str, child_id: str, day: date, tz: tzinfo) -> list[Mo
     return moments
 
 
-def _card_day(card: dict[str, Any], tz: tzinfo) -> date:
+def _card_day(card: dict[str, Any], tz: tzinfo) -> date | None:
     # Card dates are local midnight in epoch milliseconds.
-    return datetime.fromtimestamp(card["date"] / 1000, tz).date()
+    when = _epoch(card.get("date"), tz)
+    return when.date() if when else None
 
 
 def _child_ids(item: dict[str, Any]) -> tuple[str, ...]:
     """The 'children' of a timeline card or conversation."""
-    return tuple(child["id"] for child in item.get("children") or [] if isinstance(child, dict) and child.get("id"))
+    return tuple(child_id for child in _dicts(item.get("children")) if (child_id := _id(child.get("id"))))
+
+
+def _note(journal: dict[str, Any], child_id: str, day: date) -> Moment | None:
+    """The journal's free text, as an untimed moment."""
+    if not (text := html_to_text(_raw_str(journal.get("journalContent")))):
+        return None
+    writer = _str(journal.get("writtenByName"))
+    return Moment(
+        child_id=child_id,
+        day=day,
+        category=CATEGORY_NOTE,
+        icon="note",
+        label=f"Note from {writer}" if writer else "Note",
+        description=text,
+        remarks="",
+        start=None,
+        end=None,
+        amount_ml=None,
+    )
+
+
+def _photo(photo: dict[str, Any], card: dict[str, Any], day: date) -> Photo | None:
+    if not (photo_id := _id(photo.get("id"))):
+        return None
+    tagged = tuple(
+        child_id
+        for tag in _dicts(photo.get("childTags"))
+        if tag.get("ownChild") and (child_id := _id(tag.get("personId")))
+    )
+    media_type = _str(photo.get("mediaType")) or "photo"
+    full_url = _str(photo.get("fullSizeUrl"))
+    return Photo(
+        id=photo_id,
+        child_ids=tagged or _child_ids(card),
+        day=day,
+        description=_raw_str(photo.get("description")),
+        media_type=media_type,
+        extension=_extension(full_url, media_type),
+        full_url=full_url,
+        medium_url=_str(photo.get("mediumUrl")),
+        thumb_url=_str(photo.get("thumbUrl")),
+    )
 
 
 def parse_timeline(cards: list[dict[str, Any]], tz: tzinfo) -> Timeline:
     """Moments sorted oldest first; photos in timeline order (newest day first)."""
-    moments: list[Moment] = []
-    photos: list[Photo] = []
-    for card in cards:
-        card_type = card.get("type")
-        if "date" not in card:
+    timeline = Timeline(moments=[], photos=[])
+    for card in _dicts(cards):
+        if (day := _card_day(card, tz)) is None:
             continue
-        day = _card_day(card, tz)
-        if card_type == "journal" and (journal := card.get("journal")):
-            child_ids = (journal["childId"],) if journal.get("childId") else _child_ids(card)
-            for child_id in child_ids:
-                moments.extend(parse_day_rhythm(journal.get("dayRythmContent") or "", child_id, day, tz))
-                if note := html_to_text(journal.get("journalContent") or ""):
-                    moments.append(
-                        Moment(
-                            child_id=child_id,
-                            day=day,
-                            category=CATEGORY_NOTE,
-                            icon="note",
-                            label=f"Note from {journal['writtenByName']}" if journal.get("writtenByName") else "Note",
-                            description=note,
-                            remarks="",
-                            start=None,
-                            end=None,
-                            amount_ml=None,
-                        )
-                    )
+        card_type = card.get("type")
+        if card_type == "journal" and (journal := _dict(card.get("journal"))):
+            written_for = _id(journal.get("childId"))
+            for child_id in (written_for,) if written_for else _child_ids(card):
+                timeline.journal_days.add((child_id, day))
+                timeline.moments += parse_day_rhythm(_raw_str(journal.get("dayRythmContent")), child_id, day, tz)
+                if note := _note(journal, child_id, day):
+                    timeline.moments.append(note)
         elif card_type == "photo":
-            for photo in card.get("photos") or []:
-                tagged = tuple(tag["personId"] for tag in photo.get("childTags") or [] if tag.get("ownChild"))
-                media_type = photo.get("mediaType") or "photo"
-                full_url = photo.get("fullSizeUrl") or ""
-                photos.append(
-                    Photo(
-                        id=photo["id"],
-                        child_ids=tagged or _child_ids(card),
-                        day=day,
-                        description=photo.get("description") or "",
-                        media_type=media_type,
-                        extension=_extension(full_url, media_type),
-                        full_url=full_url,
-                        medium_url=photo.get("mediumUrl") or "",
-                        thumb_url=photo.get("thumbUrl") or "",
-                    )
-                )
-    moments.sort(key=_moment_sort_key)
-    return Timeline(moments=moments, photos=photos)
+            timeline.photos += [p for photo in _dicts(card.get("photos")) if (p := _photo(photo, card, day))]
+    timeline.moments.sort(key=_moment_sort_key)
+    return timeline

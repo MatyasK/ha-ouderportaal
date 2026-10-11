@@ -3,20 +3,30 @@
 from __future__ import annotations
 
 import copy
+import logging
 import re
-from datetime import date, datetime
+from collections.abc import Iterable
+from datetime import date, datetime, timedelta
 from typing import Any
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
 import pytest
+from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
-from pytest_homeassistant_custom_component.common import MockConfigEntry, async_capture_events
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_capture_events,
+    async_fire_time_changed,
+)
 
-from custom_components.ouderportaal.api import OuderportaalConnectionError
+from custom_components.ouderportaal.api import OuderportaalAuthError, OuderportaalConnectionError
+from custom_components.ouderportaal.archive import PhotoArchive
 from custom_components.ouderportaal.const import CONF_PORTAL, DOMAIN, EVENT_NEW_ENTRY
+from custom_components.ouderportaal.timeline import Photo, Timeline
 
-from .conftest import CHILD_ID, PHOTO_BYTES
+from .conftest import CHILD_ID, PHOTO_BYTES, load_fixture
 
 pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
 
@@ -53,6 +63,11 @@ async def entry(hass: HomeAssistant, freezer, media_dir, photo_cdn) -> MockConfi
 async def _setup(hass: HomeAssistant, entry: MockConfigEntry) -> None:
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done(wait_background_tasks=True)
+
+
+async def _refresh(hass: HomeAssistant, entry: MockConfigEntry) -> None:
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
 
 
 async def _restart(hass: HomeAssistant, entry: MockConfigEntry) -> None:
@@ -123,6 +138,69 @@ async def test_failed_import_is_retried_after_restart(hass: HomeAssistant, entry
     assert "2026-10-01" in {m.day.isoformat() for m in entry.runtime_data.history.moments}
 
 
+async def test_unwritable_media_folder_only_stops_saving_photos(
+    hass: HomeAssistant, entry, mock_client, media_dir, caplog
+) -> None:
+    # The photos' folder is taken by a file, like a media folder Home Assistant cannot write to.
+    media_dir.write_text("not a folder")
+    caplog.set_level(logging.INFO)
+
+    await _setup(hass, entry)
+    await _refresh(hass, entry)
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert entry.runtime_data.last_update_success
+    assert hass.states.get("sensor.sam_last_activity").state == "12:00 (Fles)voeding"
+    assert hass.states.get("image.sam_latest_photo").attributes["photo_id"] == "photo3"
+    # Warned once, not on every poll.
+    assert caplog.text.count("Could not save photos") == 1
+
+    media_dir.unlink()
+    await _refresh(hass, entry)
+
+    assert (media_dir / "2026-10-07" / "photo3.jpeg").read_bytes() == PHOTO_BYTES
+    assert "Saving photos works again" in caplog.text
+
+
+@pytest.mark.parametrize("rejected", ["get_timeline", "get_messages"])
+async def test_rejected_password_during_import_starts_reauth(
+    hass: HomeAssistant, entry, mock_client, timeline_cards, rejected: str
+) -> None:
+    first_poll = timeline_cards if rejected == "get_timeline" else load_fixture("messages.json")
+    getattr(mock_client, rejected).side_effect = [first_poll, OuderportaalAuthError("password changed")]
+
+    await _setup(hass, entry)
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert [f["context"]["source"] for f in hass.config_entries.flow.async_progress()] == [SOURCE_REAUTH]
+
+
+async def test_unchanged_poll_does_not_serialize_the_history(hass: HomeAssistant, entry, mock_client) -> None:
+    await _setup(hass, entry)
+
+    with patch.object(Timeline, "to_dict", autospec=True, side_effect=Timeline.to_dict) as to_dict:
+        await _refresh(hass, entry)
+
+    to_dict.assert_not_called()
+
+
+async def test_history_is_saved_shortly_after_a_change(
+    hass: HomeAssistant, entry, mock_client, timeline_cards, hass_storage, freezer
+) -> None:
+    await _setup(hass, entry)
+    cards = copy.deepcopy(timeline_cards)
+    cards[1]["photos"].insert(0, cards[1]["photos"][0] | {"id": "photo4"})
+    mock_client.offsets[0] = cards
+
+    await _refresh(hass, entry)
+    freezer.tick(timedelta(minutes=1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    stored = hass_storage[f"ouderportaal.{entry.entry_id}.history"]["data"]
+    assert "photo4" in {p["id"] for p in stored["timeline"]["photos"]}
+
+
 async def test_expired_photo_url_is_retried_on_next_poll(
     hass: HomeAssistant, entry, photo_cdn, media_dir, mock_client
 ) -> None:
@@ -134,8 +212,7 @@ async def test_expired_photo_url_is_retried_on_next_poll(
 
     photo_cdn.clear_requests()
     photo_cdn.get(re.compile(r"^https://resource\.kidskonnect\.cloud/"), content=PHOTO_BYTES)
-    await entry.runtime_data.async_refresh()
-    await hass.async_block_till_done()
+    await _refresh(hass, entry)
 
     assert (media_dir / "2026-10-07" / "photo3.jpeg").read_bytes() == PHOTO_BYTES
 
@@ -166,8 +243,7 @@ async def test_new_photos_event_points_at_saved_copy(
     cards = copy.deepcopy(timeline_cards)
     cards[1]["photos"].insert(0, cards[1]["photos"][0] | {"id": "photo4"})
     mock_client.offsets[0] = cards
-    await entry.runtime_data.async_refresh()
-    await hass.async_block_till_done()
+    await _refresh(hass, entry)
 
     (event,) = events
     assert event.data["media_url"] == "/media/local/ouderportaal/2026-10-07/photo4.jpeg"
@@ -216,6 +292,30 @@ async def test_websocket_returns_days_newest_first(hass: HomeAssistant, entry, m
         "url": "/media/local/ouderportaal/2026-10-07/photo3.jpeg",
         "media_content_id": "media-source://media_source/local/ouderportaal/2026-10-07/photo3.jpeg",
     }
+
+
+@pytest.mark.usefixtures("history_pages")
+async def test_websocket_only_looks_up_the_photos_it_returns(
+    hass: HomeAssistant, entry, mock_client, hass_ws_client
+) -> None:
+    await _setup(hass, entry)
+    ws = await hass_ws_client(hass)
+    looked_up: list[str] = []
+    saved = PhotoArchive.async_saved
+
+    async def spy(archive: PhotoArchive, photos: Iterable[Photo]) -> set[str]:
+        photos = list(photos)
+        looked_up.extend(p.id for p in photos)
+        return await saved(archive, photos)
+
+    with patch.object(PhotoArchive, "async_saved", spy):
+        await ws.send_json({"id": 1, "type": "ouderportaal/timeline", "days": 1})
+        today = (await ws.receive_json())["result"]["children"][0]["days"][0]
+        await ws.send_json({"id": 2, "type": "ouderportaal/timeline", "child_id": "someone-else"})
+        await ws.receive_json()
+
+    assert sorted(looked_up) == ["photo1", "photo2", "photo3"]
+    assert all(p["saved"] for p in today["photos"])
 
 
 async def test_websocket_filters_on_child(hass: HomeAssistant, entry, mock_client, hass_ws_client) -> None:

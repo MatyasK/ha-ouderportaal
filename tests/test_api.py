@@ -197,6 +197,17 @@ async def test_wrong_password_raises_auth_error(client: OuderportaalClient, port
     assert portal.calls == ["login"]
 
 
+async def test_still_unauthorized_after_renewing_raises_auth_error(
+    client: OuderportaalClient, portal: FakePortal
+) -> None:
+    # The login works, but the account may no longer read the timeline.
+    portal.timeline_status = 401
+
+    with pytest.raises(OuderportaalAuthError):
+        await client.get_timeline()
+    assert portal.calls == ["login", "timeline", "refresh", "timeline"]
+
+
 async def test_server_error_raises_connection_error(client: OuderportaalClient, portal: FakePortal) -> None:
     portal.timeline_status = 500
 

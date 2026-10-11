@@ -29,6 +29,7 @@ class PhotoArchive:
         self._hass = hass
         media_dir = hass.config.media_dirs.get(MEDIA_SOURCE_DIR) or hass.config.path("media")
         self.root = Path(media_dir) / ARCHIVE_DIR
+        self._write_failing = False
 
     def path(self, photo: Photo) -> Path:
         return self.root / photo.filename
@@ -48,11 +49,20 @@ class PhotoArchive:
         return await self._hass.async_add_executor_job(lambda: {p.id for p in photos if self.path(p).is_file()})
 
     async def async_download_missing(self, photos: Iterable[Photo]) -> int:
-        """Download photos without a copy that still have a portal URL. Returns how many were saved."""
+        """Download photos without a copy that still have a portal URL. Returns how many were saved.
+
+        Saving is best effort: when the media folder cannot be written to, the rest of the integration keeps working.
+        """
         candidates = [p for p in photos if p.full_url]
         saved = await self.async_saved(candidates)
         missing = [p for p in candidates if p.id not in saved]
         if not missing:
+            return 0
+        # Folders first, so nothing is downloaded when they cannot be made.
+        try:
+            await self._hass.async_add_executor_job(self._make_folders, {self.path(p).parent for p in missing})
+        except OSError as err:
+            self._write_failed(err)
             return 0
         session = async_get_clientsession(self._hass)
         semaphore = asyncio.Semaphore(MAX_PARALLEL_DOWNLOADS)
@@ -75,13 +85,30 @@ class PhotoArchive:
         except (aiohttp.ClientError, TimeoutError) as err:
             _LOGGER.debug("Photo %s not saved yet: %s", photo.id, err)
             return False
-        await self._hass.async_add_executor_job(self._write, self.path(photo), content)
+        try:
+            await self._hass.async_add_executor_job(self._write, self.path(photo), content)
+        except OSError as err:
+            self._write_failed(err)
+            return False
+        if self._write_failing:
+            _LOGGER.info("Saving photos works again")
+            self._write_failing = False
         return True
+
+    def _write_failed(self, err: OSError) -> None:
+        # Every poll tries again; warn once.
+        if not self._write_failing:
+            _LOGGER.warning("Could not save photos in %s, will keep trying: %s", self.root, err)
+        self._write_failing = True
+
+    @staticmethod
+    def _make_folders(folders: set[Path]) -> None:
+        for folder in folders:
+            folder.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
     def _write(path: Path, content: bytes) -> None:
         # Write next to the target and rename, so a crash never leaves half a photo behind.
-        path.parent.mkdir(parents=True, exist_ok=True)
         partial = path.with_name(path.name + ".part")
         partial.write_bytes(content)
         partial.replace(path)

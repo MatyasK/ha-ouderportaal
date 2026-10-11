@@ -151,7 +151,8 @@ class OuderportaalClient:
             headers = self._base_headers() | {"Authorization": f"Bearer {token}"}
             try:
                 async with self._session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as resp:
-                    if resp.status == 401 and attempt == 0:
+                    if resp.status == 401:
+                        # Renew the token and try once more; twice is a rejected login.
                         continue
                     if resp.status != 200:
                         raise OuderportaalConnectionError(f"{path} returned HTTP {resp.status}")

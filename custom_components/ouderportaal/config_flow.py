@@ -11,8 +11,8 @@ from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.helpers.selector import TextSelector, TextSelectorConfig, TextSelectorType
 
-from . import create_client
-from .api import OuderportaalAuthError, OuderportaalError, normalize_portal
+from . import create_session
+from .api import OuderportaalAuthError, OuderportaalClient, OuderportaalError, normalize_portal
 from .const import CONF_PORTAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
@@ -39,11 +39,15 @@ REAUTH_SCHEMA = vol.Schema(
 
 class OuderportaalConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
+    # 2: a child's device and entity ids include the account.
+    MINOR_VERSION = 2
 
     async def _validate(self, portal: str, username: str, password: str) -> dict[str, str]:
         """Log in and check there is at least one child. Returns form errors."""
-        client = create_client(self.hass, portal, username, password)
+        # Not an entry's setup, so nothing would close the session for us.
+        session = create_session(self.hass, auto_cleanup=False)
         try:
+            client = OuderportaalClient(session, portal, username, password)
             await client.login()
             children = await client.get_children()
         except OuderportaalAuthError:
@@ -53,6 +57,8 @@ class OuderportaalConfigFlow(ConfigFlow, domain=DOMAIN):
         except Exception:
             _LOGGER.exception("Unexpected error while logging in")
             return {"base": "unknown"}
+        finally:
+            session.detach()
         if not children:
             return {"base": "no_children"}
         return {}
