@@ -236,6 +236,18 @@ Limitations:
 - The Agenda's activities, parent meetings and activity programs are not included yet, only the schedule.
 - The schedule's summaries are in English.
 
+## Reporting a problem
+
+Open an [issue](https://github.com/MatyasK/ha-ouderportaal/issues/new/choose) and attach the integration's diagnostics: Settings > Devices & services > Ouderportaal > ⋮ > Download diagnostics.
+The diagnostics leave out your account, your children's names and what the daycare wrote: children are numbered, and the history is summed up in counts.
+They do show what the portal lets your account see, whether the last updates worked and why not, and which day rhythm icons your daycare uses.
+
+For more detail, choose Enable debug logging in the same menu, make the problem happen, and choose Disable debug logging: Home Assistant then downloads the log.
+A log is not cleaned up like the diagnostics, so remove names from it before you post it.
+Never post HAR files, tokens or passwords.
+
+Found a security problem? Please report it privately, as described in [SECURITY.md](SECURITY.md).
+
 ## Development
 
 Home Assistant does not run on Windows, so the tests run in Docker:

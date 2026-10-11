@@ -31,6 +31,11 @@ class PhotoArchive:
         self.root = Path(media_dir) / ARCHIVE_DIR
         self._write_failing = False
 
+    @property
+    def write_failing(self) -> bool:
+        """The last attempt to save a photo could not write to the media folder."""
+        return self._write_failing
+
     def path(self, photo: Photo) -> Path:
         return self.root / photo.filename
 

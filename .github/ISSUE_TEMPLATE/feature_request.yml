@@ -1,0 +1,26 @@
+name: Feature request
+description: Something from the portal you would like in Home Assistant.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: wish
+    attributes:
+      label: What you would like
+      description: What should the integration do, and what would you use it for?
+    validations:
+      required: true
+  - type: textarea
+    id: portal
+    attributes:
+      label: Where it is on the portal
+      description: >-
+        Which page of the portal shows it. A screenshot helps; blur names, photos and messages first.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy
+      options:
+        - label: I left out names, email addresses, photos, passwords, tokens and HAR files.
+          required: true
+
+# generated with AI
