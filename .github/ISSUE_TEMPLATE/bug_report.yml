@@ -1,0 +1,59 @@
+name: Bug report
+description: Something does not work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This issue is public: leave out names, email addresses, photos, passwords, tokens and HAR files.
+        Found a security problem? Please report it privately, as described in [SECURITY.md](https://github.com/MatyasK/ha-ouderportaal/blob/main/SECURITY.md).
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happens
+      description: What did you see, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen
+      description: The steps, if you know them.
+  - type: input
+    id: version
+    attributes:
+      label: Integration version
+      description: HACS shows it, and so does `custom_components/ouderportaal/manifest.json`.
+      placeholder: 0.2.0
+    validations:
+      required: true
+  - type: input
+    id: ha-version
+    attributes:
+      label: Home Assistant version
+      description: Settings > About.
+      placeholder: 2026.10.1
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: >-
+        Settings > Devices & services > Ouderportaal > ⋮ > Download diagnostics, then drag the file here.
+        They leave out your account, your children's names and what the daycare wrote.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log
+      description: >-
+        What Settings > System > Logs shows about ouderportaal. For more, use Enable debug logging in the
+        integration's ⋮ menu. A log is not cleaned up like the diagnostics: remove names first.
+      render: text
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy
+      options:
+        - label: I left out names, email addresses, photos, passwords, tokens and HAR files.
+          required: true

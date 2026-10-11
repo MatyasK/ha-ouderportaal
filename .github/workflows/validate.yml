@@ -37,5 +37,3 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-
-# generated with AI

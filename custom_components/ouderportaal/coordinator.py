@@ -185,6 +185,16 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
         return messages
 
     @property
+    def messages_failing(self) -> bool:
+        """The Messages page could not be read the last time."""
+        return self._messages_failing
+
+    @property
+    def history_imported(self) -> bool:
+        """The history import has run to the end, for this version of the import."""
+        return self._backfill_version >= BACKFILL_VERSION
+
+    @property
     def has_schedule(self) -> bool:
         """Whether the portal shows this account its Agenda."""
         return not AUTH_AGENDA.isdisjoint(self.authorizations)
@@ -204,7 +214,7 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
 
     async def async_backfill(self) -> None:
         """Import the last BACKFILL_DAYS days once, without announcing them. Runs in the background."""
-        if self._backfill_version >= BACKFILL_VERSION:
+        if self.history_imported:
             return
         try:
             await self._backfill()
