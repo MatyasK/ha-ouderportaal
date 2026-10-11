@@ -176,14 +176,29 @@ class OuderportaalClient:
         """
         return list(await self._get(f"/timeline/cards/v2/{offset}") or [])
 
-    async def get_messages(self, start: date, end: date) -> list[dict[str, Any]]:
-        """Mailbox conversations dated between start and end, as listed in the overview.
+    async def get_authorizations(self) -> set[str]:
+        """The account's system functions, e.g. 'WEB_PARENT_LOGBOOK'; the portal hides what is not listed."""
+        payload = await self._get("/parent/authorizations")
+        return set((payload or {}).get("systemFunctions") or [])
 
-        Only the overview is read: opening a conversation may mark it as read on the portal.
-        """
+    # The portal's Messages page combines the three lists below, which take any date range (the portal asks for one
+    # month at a time). Only the lists are read: opening an item marks it as read on the portal.
+
+    async def get_messages(self, start: date, end: date) -> list[dict[str, Any]]:
+        """Mailbox conversations whose latest message is dated between start and end."""
         payload = await self._get(f"/logbook/overview?from={start:%Y%m%d}&to={end:%Y%m%d}")
         return list(payload or [])
 
+    async def get_news(self, start: date, end: date) -> list[dict[str, Any]]:
+        """News items published between start and end."""
+        payload = await self._get(f"/htmlnews/view?from={start:%Y%m%d}&to={end:%Y%m%d}")
+        return list((payload or {}).get("newsItems") or [])
+
+    async def get_newsletters(self, start: date, end: date) -> list[dict[str, Any]]:
+        """Newsletters and service messages sent between start and end."""
+        payload = await self._get(f"/newsletter?from={start:%Y%m%d}&to={end:%Y%m%d}")
+        return list((payload or {}).get("newsletterItems") or [])
+
     async def get_notifications(self) -> dict[str, Any]:
-        """Unread counts, e.g. {'nrOfNewMessages': 2, 'nrOfNewNewsItems': None, ...}."""
+        """Unread counts, e.g. {'nrOfNewMessages': 2, 'nrOfNewNewsItems': None, 'nrOfNewNewsletters': 1}."""
         return dict(await self._get("/notification/notifications") or {})

@@ -175,6 +175,8 @@ class OuderportaalMailboxSensor(CoordinatorEntity[OuderportaalCoordinator], Sens
 
 
 class UnreadMessagesSensor(OuderportaalMailboxSensor):
+    """The badge on the portal's Messages tab: unread conversations, news and newsletters together."""
+
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(self, coordinator: OuderportaalCoordinator) -> None:
@@ -182,10 +184,17 @@ class UnreadMessagesSensor(OuderportaalMailboxSensor):
 
     @property
     def native_value(self) -> int | None:
-        return self.coordinator.unread_messages
+        counts = self.coordinator.unread_counts
+        return sum(counts.values()) if counts is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return dict(self.coordinator.unread_counts or {})
 
 
 class LatestMessageSensor(OuderportaalMailboxSensor):
+    """The top of the portal's Messages page, whatever kind of item it is."""
+
     def __init__(self, coordinator: OuderportaalCoordinator) -> None:
         super().__init__(coordinator, "latest_message")
 
@@ -206,9 +215,13 @@ class LatestMessageSensor(OuderportaalMailboxSensor):
         if message is None:
             return {}
         return {
+            "message_type": message.message_type,
             "message_id": message.id,
             "subject": message.subject,
             "preview": message.preview,
+            "author": message.author,
+            "from_parent": message.from_parent,
+            "has_attachment": message.has_attachment,
             "sent": message.sent,
             "unread": message.unread,
             "child_names": [self.coordinator.child_name(c) for c in message.child_ids],

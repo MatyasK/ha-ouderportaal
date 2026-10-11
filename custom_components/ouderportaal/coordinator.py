@@ -18,6 +18,9 @@ from homeassistant.util import dt as dt_util
 from .api import OuderportaalAuthError, OuderportaalClient, OuderportaalError
 from .archive import PhotoArchive
 from .const import (
+    AUTH_MESSAGES,
+    AUTH_NEWS,
+    AUTH_NEWSLETTERS,
     BACKFILL_DAYS,
     BACKFILL_MAX_PAGES,
     BACKFILL_PAGE_DELAY_S,
@@ -31,7 +34,17 @@ from .const import (
     NIGHT_UPDATE_INTERVAL,
     STORAGE_VERSION,
 )
-from .timeline import Message, Moment, Photo, Timeline, merge_timelines, parse_messages, parse_timeline
+from .timeline import (
+    Message,
+    Moment,
+    Photo,
+    Timeline,
+    merge_timelines,
+    parse_messages,
+    parse_news,
+    parse_newsletters,
+    parse_timeline,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -65,21 +78,25 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
         self.client = client
         self.archive = PhotoArchive(hass)
         self.children: dict[str, Child] = {}
+        # What the account may see, e.g. 'WEB_HTML_NEWS_VIEW'; read once at setup, like the portal does at login.
+        self.authorizations: set[str] = set()
         self._seen_store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.seen")
         self._history_store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}.history")
         # None until loaded: an empty store means "first run", which must not notify about history.
         self._seen_moments: dict[str, str] | None = None
         self._seen_photos: set[str] = set()
+        # Message key -> fingerprint, for the items in the poll window.
         self._seen_messages: dict[str, str] | None = None
         self.history = Timeline(moments=[], photos=[])
         self._backfill_version = 0
-        # The portal's own unread count; None until it has been read once.
-        self.unread_messages: int | None = None
+        # The portal's own unread counts ('messages', 'news', 'newsletters'); None until read once.
+        self.unread_counts: dict[str, int] | None = None
         self._messages_failing = False
 
     async def _async_setup(self) -> None:
         try:
             children = await self.client.get_children()
+            self.authorizations = await self.client.get_authorizations()
         except OuderportaalAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except OuderportaalError as err:
@@ -91,8 +108,9 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
         if stored := await self._seen_store.async_load():
             self._seen_moments = stored.get("moments", {})
             self._seen_photos = set(stored.get("photos", []))
-            # Missing in stores from before messages were supported: then the next poll is a silent baseline.
-            self._seen_messages = stored.get("messages")
+            # Missing in stores from before news and newsletters were supported (they kept conversations as
+            # 'messages'): then the next poll is a silent baseline.
+            self._seen_messages = stored.get("mailbox")
         if stored := await self._history_store.async_load():
             self.history = Timeline.from_dict(stored.get("timeline", {}))
             # Stores from before versioning ("backfilled": true) imported nothing: treat them as version 0.
@@ -125,9 +143,20 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
         return self.history
 
     async def _fetch_messages(self, start: date, end: date) -> list[Message] | None:
-        """Messages are an extra: when they fail, the rest of the update still goes through."""
+        """Everything on the portal's Messages page, newest first.
+
+        Messages are an extra: when they fail, the rest of the update still goes through. All or nothing, so a
+        failing part does not look like its items were removed.
+        """
+        tz = dt_util.get_default_time_zone()
+        messages: list[Message] = []
         try:
-            items = await self.client.get_messages(start, end)
+            if AUTH_MESSAGES in self.authorizations:
+                messages += parse_messages(await self.client.get_messages(start, end), tz)
+            if AUTH_NEWS in self.authorizations:
+                messages += parse_news(await self.client.get_news(start, end), tz)
+            if AUTH_NEWSLETTERS in self.authorizations:
+                messages += parse_newsletters(await self.client.get_newsletters(start, end), tz)
         except OuderportaalAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except OuderportaalError as err:
@@ -138,7 +167,8 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
         if self._messages_failing:
             _LOGGER.info("Reading messages works again")
         self._messages_failing = False
-        return parse_messages(items, dt_util.get_default_time_zone())
+        messages.sort(key=lambda m: m.sent, reverse=True)
+        return messages
 
     async def _update_unread(self) -> None:
         try:
@@ -147,7 +177,11 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
             _LOGGER.debug("Could not read the unread count: %s", err)
             return
         # The portal sends null instead of 0.
-        self.unread_messages = counts.get("nrOfNewMessages") or 0
+        self.unread_counts = {
+            "messages": counts.get("nrOfNewMessages") or 0,
+            "news": counts.get("nrOfNewNewsItems") or 0,
+            "newsletters": counts.get("nrOfNewNewsletters") or 0,
+        }
 
     async def async_backfill(self) -> None:
         """Import the last BACKFILL_DAYS days once, without announcing them. Runs in the background."""
@@ -227,12 +261,12 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
 
     async def _announce_messages(self, messages: list[Message]) -> None:
         if self._seen_messages is not None:
-            known = {m.id for m in self.history.messages}
+            known = {m.key for m in self.history.messages}
             for message in reversed(messages):  # oldest first, like the moments
-                if self._seen_messages.get(message.id) != message.fingerprint:
-                    self._fire_message(message, "updated" if message.id in known else "new")
+                if self._seen_messages.get(message.key) != message.fingerprint:
+                    self._fire_message(message, "updated" if message.key in known else "new")
         # Only the poll window is tracked; a conversation that comes back into it has a new reply.
-        seen = {m.id: m.fingerprint for m in messages}
+        seen = {m.key: m.fingerprint for m in messages}
         if seen != self._seen_messages:
             self._seen_messages = seen
             await self._save_seen()
@@ -241,7 +275,7 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
         data: dict[str, Any] = {"moments": self._seen_moments or {}, "photos": sorted(self._seen_photos)}
         # Left out until known, so a restart before the first successful read stays a silent baseline.
         if self._seen_messages is not None:
-            data["messages"] = self._seen_messages
+            data["mailbox"] = self._seen_messages
         await self._seen_store.async_save(data)
 
     def child_name(self, child_id: str) -> str:
@@ -277,11 +311,15 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
             {
                 "entry_type": "message",
                 "change": change,
+                "message_type": message.message_type,
                 "message_id": message.id,
                 "child_ids": list(message.child_ids),
                 "child_names": [self.child_name(c) for c in message.child_ids],
                 "subject": message.subject,
                 "preview": message.preview,
+                "author": message.author,
+                "from_parent": message.from_parent,
+                "has_attachment": message.has_attachment,
                 "sent": message.sent.isoformat(),
                 "unread": message.unread,
                 "url": f"{self.client.base_url}/parent/#/tabs/mailbox",

@@ -1,0 +1,17 @@
+{
+  "result": true,
+  "payload": {
+    "unreadNewsCount": 1,
+    "newsItems": [
+      {
+        "id": "news-closed",
+        "title": "Sluitingsdag 24 oktober",
+        "contentSnippet": "Op 24 oktober zijn we gesloten vanwege een studiedag.",
+        "publishDate": 1791151200000,
+        "isNew": true,
+        "containsAttachment": true
+      }
+    ]
+  },
+  "messages": null
+}

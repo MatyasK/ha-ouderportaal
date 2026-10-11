@@ -35,6 +35,7 @@ def _moment(moment: Moment) -> dict[str, Any]:
 
 def _message(coordinator: OuderportaalCoordinator, message: Message) -> dict[str, Any]:
     return message.to_dict() | {
+        "key": message.key,
         "child_names": [coordinator.child_name(c) for c in message.child_ids],
         "url": f"{coordinator.client.base_url}/parent/#/tabs/mailbox",
     }

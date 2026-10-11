@@ -1,18 +1,77 @@
 [
   {
+    "lastLogMessageMessageId": "msg-trip",
+    "logMessageIds": ["log-trip-sam"],
     "logMessageMessageId": "msg-trip",
     "subject": "Uitje naar de kinderboerderij",
-    "message": "<p>Morgen gaan we naar de <b>kinderboerderij</b>.</p><p>Graag laarsjes mee!</p>",
-    "date": "2026-10-07T14:30:00",
-    "unread": true,
-    "children": [{"id": "c0ffee00c0ffee00c0ffee00c0ffee00", "firstName": "Sam"}]
+    "message": "<p>Beste ouders,</p>\n<p>\n  <br/>\n</p>\n<p>Morgen gaan we naar de <b>kinderboerderij</b>. Graag laarsjes\n  mee! </p>\n<p>Groetjes,<br/> Groep Tommie</p>",
+    "lastWritten": "Tommie",
+    "type": "to_parent_message",
+    "date": 1791376200000,
+    "childFirstName": "Sam",
+    "children": [
+      {
+        "id": "c0ffee00c0ffee00c0ffee00c0ffee00",
+        "firstName": "Sam",
+        "middleName": null,
+        "lastName": "Test",
+        "hasActivePlacements": true,
+        "avatar": {
+          "resourceItemId": "avatar1",
+          "fileName": "cropPhoto.jpg",
+          "contentType": "image/jpeg",
+          "contentSize": 1234,
+          "awsUrl": null
+        },
+        "avatars": {
+          "childId": null,
+          "smallResourceItemId": null,
+          "largeResourceItemId": null,
+          "thumbUrl": "https://resource.kidskonnect.cloud/test/cropPhoto-thumb.jpg?Expires=1&Key-Pair-Id=TEST&Signature=test",
+          "fullSizeUrl": "https://resource.kidskonnect.cloud/test/cropPhoto.jpg?Expires=1&Key-Pair-Id=TEST&Signature=test",
+          "awsResourceItemId": "avatar1"
+        },
+        "childGroup": {
+          "id": "group-tommie",
+          "name": "Tommie",
+          "phoneNumber": "+31600000000",
+          "location": {"id": "location1", "name": "Kinderdagverblijf De Speeltuin"}
+        },
+        "dateOfBirth": 1778882400000
+      }
+    ],
+    "isNew": false,
+    "lastFromParent": false,
+    "unread": true
   },
   {
-    "logMessageMessageId": "msg-closed",
-    "subject": "Sluitingsdag",
-    "message": "Op 24 oktober zijn we gesloten.",
-    "date": 1791196200000,
-    "unread": false,
-    "children": []
+    "lastLogMessageMessageId": "msg-pacifier-reply",
+    "logMessageIds": ["log-pacifier-sam"],
+    "logMessageMessageId": "msg-pacifier",
+    "subject": "🍼 Welke speen gebruikt jouw kindje?",
+    "message": "<p>Sam gebruikt een speen van Bibs. <br/>\n</p>",
+    "lastWritten": "Alex Test",
+    "type": "from_parent_message",
+    "date": 1791310440000,
+    "childFirstName": "Sam",
+    "children": [
+      {
+        "id": "c0ffee00c0ffee00c0ffee00c0ffee00",
+        "firstName": "Sam",
+        "middleName": null,
+        "lastName": "Test",
+        "hasActivePlacements": true,
+        "childGroup": {
+          "id": "group-tommie",
+          "name": "Tommie",
+          "phoneNumber": "+31600000000",
+          "location": {"id": "location1", "name": "Kinderdagverblijf De Speeltuin"}
+        },
+        "dateOfBirth": 1778882400000
+      }
+    ],
+    "isNew": false,
+    "lastFromParent": true,
+    "unread": null
   }
 ]
