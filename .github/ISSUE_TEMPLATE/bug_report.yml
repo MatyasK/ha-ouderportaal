@@ -57,5 +57,3 @@ body:
       options:
         - label: I left out names, email addresses, photos, passwords, tokens and HAR files.
           required: true
-
-# generated with AI

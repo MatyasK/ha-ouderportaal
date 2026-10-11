@@ -25,5 +25,3 @@ These are security problems:
 - Saving a photo writes outside `media/ouderportaal/`.
 
 A problem in the portal itself is for Konnect, not for this project.
-
-<!-- generated with AI -->

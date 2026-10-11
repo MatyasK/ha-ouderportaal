@@ -20,5 +20,3 @@ jobs:
         run: |
           version=$(jq -r .version custom_components/ouderportaal/manifest.json)
           gh release create "v$version" --target "$GITHUB_SHA" --title "v$version" --generate-notes
-
-# generated with AI
