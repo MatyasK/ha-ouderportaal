@@ -1,8 +1,10 @@
-"""Keeps a copy of every photo in Home Assistant's media folder.
+"""Keeps a copy of every photo in a private folder in Home Assistant's config folder.
 
-Files land in <media>/ouderportaal/<YYYY-MM-DD>/<photo id>.<ext>, so they also show up under
-Media > My media and in backups. Each file is downloaded once; the portal's signed URLs expire
-within hours, so a download that fails is retried on a later poll with fresh URLs.
+Files land in <config>/ouderportaal/<YYYY-MM-DD>/<photo id>.<ext>, so they are in backups. The portal shows a photo
+only to the parent who is logged in, and it can show other children, so no media source exposes the folder: the
+latest photo is served by the image entity, and any saved photo by PhotoView, to admins only. Each file is downloaded
+once; the portal's signed URLs expire within hours, so a download that fails is retried on a later poll with fresh
+URLs.
 """
 
 from __future__ import annotations
@@ -13,40 +15,42 @@ from collections.abc import Iterable
 from pathlib import Path
 
 import aiohttp
+from aiohttp import web
+from homeassistant.components.http import HomeAssistantView, require_admin
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.http import KEY_HASS
 
 from .const import ARCHIVE_DIR, MAX_PARALLEL_DOWNLOADS
 from .timeline import Photo
 
 _LOGGER = logging.getLogger(__name__)
 
-MEDIA_SOURCE_DIR = "local"
+PHOTO_URL = f"/api/{ARCHIVE_DIR}/photos"
+
+
+def archive_root(hass: HomeAssistant) -> Path:
+    return Path(hass.config.path(ARCHIVE_DIR))
 
 
 class PhotoArchive:
     def __init__(self, hass: HomeAssistant) -> None:
         self._hass = hass
-        media_dir = hass.config.media_dirs.get(MEDIA_SOURCE_DIR) or hass.config.path("media")
-        self.root = Path(media_dir) / ARCHIVE_DIR
+        self.root = archive_root(hass)
         self._write_failing = False
 
     @property
     def write_failing(self) -> bool:
-        """The last attempt to save a photo could not write to the media folder."""
+        """The last attempt to save a photo could not write to the archive folder."""
         return self._write_failing
 
     def path(self, photo: Photo) -> Path:
         return self.root / photo.filename
 
     @staticmethod
-    def media_url(photo: Photo) -> str:
-        """Authenticated URL served by Home Assistant's media source (needs a signed path or login)."""
-        return f"/media/{MEDIA_SOURCE_DIR}/{ARCHIVE_DIR}/{photo.filename}"
-
-    @staticmethod
-    def media_content_id(photo: Photo) -> str:
-        return f"media-source://media_source/{MEDIA_SOURCE_DIR}/{ARCHIVE_DIR}/{photo.filename}"
+    def url(photo: Photo) -> str:
+        """Served by PhotoView to admins: with their login, or signed with `auth/sign_path`."""
+        return f"{PHOTO_URL}/{photo.filename}"
 
     async def async_saved(self, photos: Iterable[Photo]) -> set[str]:
         """Ids of the photos that already have a copy."""
@@ -56,7 +60,7 @@ class PhotoArchive:
     async def async_download_missing(self, photos: Iterable[Photo]) -> int:
         """Download photos without a copy that still have a portal URL. Returns how many were saved.
 
-        Saving is best effort: when the media folder cannot be written to, the rest of the integration keeps working.
+        Saving is best effort: when the archive folder cannot be written to, the rest of the integration keeps working.
         """
         candidates = [p for p in photos if p.full_url]
         saved = await self.async_saved(candidates)
@@ -117,3 +121,20 @@ class PhotoArchive:
         partial = path.with_name(path.name + ".part")
         partial.write_bytes(content)
         partial.replace(path)
+
+
+class PhotoView(HomeAssistantView):
+    """A saved photo, for admins only: other Home Assistant users may not see what the portal shows the parent."""
+
+    url = PHOTO_URL + r"/{day:\d{4}-\d{2}-\d{2}}/{name:[A-Za-z0-9_-]{1,64}\.[a-z0-9]{1,5}}"
+    name = f"api:{ARCHIVE_DIR}:photo"
+
+    @require_admin
+    async def get(self, request: web.Request, day: str, name: str) -> web.FileResponse:
+        hass = request.app[KEY_HASS]
+        # The route only matches a date and a plain file name, so the path stays inside the archive.
+        path = archive_root(hass) / day / name
+        if not await hass.async_add_executor_job(path.is_file):
+            raise web.HTTPNotFound
+        # Checked with the server on every use, so a browser shared with a non-admin does not show it from its cache.
+        return web.FileResponse(path, headers={"Cache-Control": "private, no-cache"})

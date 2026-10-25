@@ -13,6 +13,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from . import websocket
 from .api import OuderportaalClient
+from .archive import PhotoView
 from .const import CONF_PORTAL, DOMAIN
 from .coordinator import OuderportaalConfigEntry, OuderportaalCoordinator, ScheduleCoordinator
 
@@ -32,6 +33,7 @@ def create_session(hass: HomeAssistant, *, auto_cleanup: bool = True) -> aiohttp
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     websocket.async_register(hass)
+    hass.http.register_view(PhotoView())
     return True
 
 

@@ -32,7 +32,7 @@ def _quiet_access_log(caplog) -> None:
 
 
 @pytest.fixture
-async def entry(hass: HomeAssistant, freezer, media_dir, photo_cdn) -> MockConfigEntry:
+async def entry(hass: HomeAssistant, freezer, archive_dir, photo_cdn) -> MockConfigEntry:
     freezer.move_to(NOW)
     await hass.config.async_set_time_zone("Europe/Amsterdam")
     entry = MockConfigEntry(

@@ -10,6 +10,9 @@ CONF_PORTAL: Final = "portal"
 # Fired once per new day-rhythm moment, batch of photos or message.
 EVENT_NEW_ENTRY: Final = "ouderportaal_new_entry"
 
+# Key of the image entity with a child's latest photo; photo events link to it.
+LATEST_PHOTO_KEY: Final = "latest_photo"
+
 # Poll often while the daycare is open, rarely at night.
 DAY_START_HOUR: Final = 6
 DAY_END_HOUR: Final = 20
@@ -44,7 +47,7 @@ SCHEDULE_PAST_DAYS: Final = 31
 SCHEDULE_FUTURE_DAYS: Final = 92
 SCHEDULE_REQUEST_DAYS: Final = 31
 
-# Photos are saved under <media>/ouderportaal/<date>/.
+# Photos are saved under <config>/ouderportaal/<date>/.
 ARCHIVE_DIR: Final = "ouderportaal"
 MAX_PARALLEL_DOWNLOADS: Final = 3
 
