@@ -70,9 +70,11 @@ Only the kinds of item the portal shows your account are read.
 
 ### Photos and history
 
-Every photo is saved once into Home Assistant's media folder, as `media/ouderportaal/<YYYY-MM-DD>/<photo id>.jpeg`.
-You can browse them under Media > My media, they are included in backups, and they stay even if the daycare removes them from the portal.
-If the media folder cannot be written to, photos are not saved and a warning is logged once; everything else keeps working.
+Every photo is saved once into a private folder in Home Assistant's config folder, as `ouderportaal/<YYYY-MM-DD>/<photo id>.<extension>`.
+They are included in backups, and they stay even if the daycare removes them from the portal.
+They are not in the media folder: the portal shows a photo only to the parent who is logged in, and a photo can show other children.
+So every Home Assistant user sees a child's latest photo through its image entity, but only admins can open the other saved photos.
+If the folder cannot be written to, photos are not saved and a warning is logged once; everything else keeps working.
 
 On first setup, the integration imports the last 30 days of day rhythm, photos and messages in the background, one timeline page per second.
 After that it keeps everything new.
@@ -88,12 +90,13 @@ For a timeline card, the websocket command `ouderportaal/timeline` returns every
 {"children": [{"id": "...", "name": "Sam", "days": [
   {"date": "2026-10-07",
    "moments": [{"title": "09:00 (Fles)voeding", "category": "bottle", "amount_ml": 130, "start": "...", "end": null, "remarks": "20cc over", "...": "..."}],
-   "photos": [{"id": "...", "url": "/media/local/ouderportaal/2026-10-07/....jpeg", "saved": true, "description": "...", "media_type": "photo", "media_content_id": "media-source://..."}],
+   "photos": [{"id": "...", "url": "/api/ouderportaal/photos/2026-10-07/....jpeg", "saved": true, "description": "...", "media_type": "photo"}],
    "messages": [{"key": "message-...", "id": "...", "message_type": "message", "subject": "...", "preview": "...", "author": "Tommie", "from_parent": false, "has_attachment": false, "sent": "2026-10-07T14:30:00+02:00", "unread": true, "child_names": ["Sam"], "url": "https://<portal>.ouderportaal.nl/parent/#/tabs/mailbox"}]}
 ]}]}
 ```
 
-Photo `url`s need a logged-in request; in a custom card, sign them first with `hass.callWS({type: "auth/sign_path", path: url})`.
+Photo `url`s are only for admins, and `null` for other users.
+They need a logged-in request; in a custom card, sign them first with `hass.callWS({type: "auth/sign_path", path: url})`.
 News and newsletters are for the whole family, so they show up for every child.
 
 And an event, `ouderportaal_new_entry`, fired for:
@@ -205,7 +208,7 @@ automation:
           message: "{{ events[0].summary }} from {{ events[0].start[11:16] }}"
 ```
 
-`media_url` points at the saved copy, which the companion app loads with your Home Assistant login.
+`media_url` points at the child's latest photo image, which the companion app loads with your Home Assistant login.
 `image_url` is the portal's own signed URL; it works anywhere but expires after about an hour.
 
 ### Event data
@@ -215,7 +218,8 @@ Moments: `child_id`, `child_name`, `change`, `category` (`bottle`, `sleep`, `dia
 Messages: `message_type` (`message`, `news`, `newsletter`, `service_message`), `message_id`, `change`, `child_ids`, `child_names`, `subject`, `preview`, `author`, `from_parent`, `has_attachment`, `sent`, `unread`, `url`.
 To be notified only of conversations, add `message_type: message` to the trigger's `event_data`.
 
-Photos: `child_id`, `child_name`, `count`, `media_url`, `image_url`, `photos` (each with `id`, `date`, `description`, `media_type`, `media_url`, `media_content_id`, `full_url`, `medium_url`, `thumb_url`).
+Photos: `child_id`, `child_name`, `count`, `media_url`, `media_content_id`, `image_url`, `photos` (each with `id`, `date`, `description`, `media_type`, `media_url`, `full_url`, `medium_url`, `thumb_url`).
+A photo's own `media_url` is its saved copy, which only admins can open.
 
 ## How it works
 
