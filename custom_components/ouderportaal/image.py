@@ -25,7 +25,7 @@ async def async_setup_entry(
 
 
 class OuderportaalLatestPhoto(OuderportaalEntity, ImageEntity):
-    """The newest photo, served from the saved copy in the media folder."""
+    """The newest photo, served from the saved copy to every Home Assistant user who may see the entity."""
 
     def __init__(self, hass: HomeAssistant, coordinator: OuderportaalCoordinator, child_id: str) -> None:
         OuderportaalEntity.__init__(self, coordinator, child_id, "latest_photo")
@@ -34,7 +34,10 @@ class OuderportaalLatestPhoto(OuderportaalEntity, ImageEntity):
         self._update_photo()
 
     def _update_photo(self) -> None:
-        photo = next((p for p in self.photos if p.media_type == "photo"), None)
+        # The history, not the coordinator's data: a poll adds new photos to it before announcing them, so a
+        # notification that loads this image during the rest of the poll already gets the new photo.
+        photos = (p for p in self.coordinator.history.photos if self.child_id in p.child_ids)
+        photo = next((p for p in photos if p.media_type == "photo"), None)
         if photo and (self._photo is None or photo.id != self._photo.id):
             self._photo = photo
             self._attr_image_last_updated = dt_util.now()
@@ -46,6 +49,7 @@ class OuderportaalLatestPhoto(OuderportaalEntity, ImageEntity):
         super()._handle_coordinator_update()
 
     async def async_image(self) -> bytes | None:
+        self._update_photo()
         if self._photo is None:
             return None
         path = self.coordinator.archive.path(self._photo)
@@ -63,5 +67,4 @@ class OuderportaalLatestPhoto(OuderportaalEntity, ImageEntity):
             "photo_id": self._photo.id,
             "date": self._photo.day.isoformat(),
             "description": self._photo.description,
-            "media_url": self.coordinator.archive.media_url(self._photo),
         }

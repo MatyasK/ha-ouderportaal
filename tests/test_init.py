@@ -40,7 +40,7 @@ def _with(cards: list[dict[str, Any]], *moments: str, photo_ids: tuple[str, ...]
 
 
 @pytest.fixture
-async def entry(hass: HomeAssistant, freezer, media_dir, photo_cdn) -> MockConfigEntry:
+async def entry(hass: HomeAssistant, freezer, archive_dir, photo_cdn) -> MockConfigEntry:
     freezer.move_to(NOW)
     await hass.config.async_set_time_zone("Europe/Amsterdam")
     entry = MockConfigEntry(

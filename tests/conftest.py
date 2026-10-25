@@ -88,6 +88,10 @@ def photo_cdn(aioclient_mock):
 
 
 @pytest.fixture
-def media_dir(hass, tmp_path) -> Path:
-    hass.config.media_dirs = {"local": str(tmp_path)}
-    return tmp_path / "ouderportaal"
+def archive_dir(hass, tmp_path) -> Path:
+    """The private photo folder in the config folder. A media folder is set up too, to check it stays empty."""
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    hass.config.config_dir = str(config_dir)
+    hass.config.media_dirs = {"local": str(tmp_path / "media")}
+    return config_dir / "ouderportaal"

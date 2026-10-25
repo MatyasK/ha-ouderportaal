@@ -11,6 +11,7 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.storage import Store
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -63,6 +64,14 @@ class Child:
     id: str
     first_name: str
     full_name: str
+
+
+def child_unique_id(coordinator: OuderportaalCoordinator, child_id: str) -> str:
+    """The child in this account, so two parents can each add theirs for the same child: '<entry id>_<child id>'.
+
+    The base of the child's device identifier and entity unique ids.
+    """
+    return f"{coordinator.config_entry.entry_id}_{child_id}"
 
 
 def update_interval_for(now: datetime) -> timedelta:
@@ -137,8 +146,10 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
             raise UpdateFailed(str(err)) from err
 
         timeline = parse_timeline(cards, dt_util.get_default_time_zone())
-        # Save photos before announcing them, so a notification can show the saved copy.
+        # Save photos and add them to the history before announcing them: a notification shows the latest photo
+        # image, which serves the newest saved photo in the history.
         await self.archive.async_download_missing(timeline.photos)
+        self._add_to_history(timeline)
         # An empty answer is more likely a hiccup than a wiped timeline: keep the seen state.
         if timeline.moments or timeline.photos:
             await self._announce(timeline)
@@ -150,10 +161,9 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
             raise ConfigEntryAuthFailed(str(err)) from err
         if messages is not None:
             await self._announce_messages(messages)
-            timeline.messages = messages
+            self._add_to_history(Timeline(moments=[], photos=[], messages=messages))
             await self._update_unread()
 
-        self._add_to_history(timeline)
         return self.history
 
     async def _fetch_messages(self, start: date, end: date) -> list[Message] | None:
@@ -380,6 +390,10 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
 
     def _fire_photos(self, child_id: str, photos: list[Photo]) -> None:
         """One event per batch, so an upload of 20 photos is one notification."""
+        # The latest photo is shown to every Home Assistant user by the image entity; older ones only to admins.
+        image = er.async_get(self.hass).async_get_entity_id(
+            "image", DOMAIN, f"{child_unique_id(self, child_id)}_latest_photo"
+        )
         self.hass.bus.async_fire(
             EVENT_NEW_ENTRY,
             {
@@ -388,8 +402,9 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
                 "child_id": child_id,
                 "child_name": self.child_name(child_id),
                 "count": len(photos),
-                # The saved copy, served by Home Assistant; the companion app loads it with your login.
-                "media_url": self.archive.media_url(photos[0]),
+                # The child's latest photo, served by its image entity; the companion app loads it with your login.
+                "media_url": f"/api/image_proxy/{image}" if image else None,
+                "media_content_id": f"media-source://image/{image}" if image else None,
                 # The portal's signed URL; works anywhere but expires after about an hour.
                 "image_url": photos[0].medium_url or photos[0].full_url,
                 "photos": [
@@ -398,8 +413,8 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
                         "date": p.day.isoformat(),
                         "description": p.description,
                         "media_type": p.media_type,
-                        "media_url": self.archive.media_url(p),
-                        "media_content_id": self.archive.media_content_id(p),
+                        # The saved copy, for admins only.
+                        "media_url": self.archive.url(p),
                         "full_url": p.full_url,
                         "medium_url": p.medium_url,
                         "thumb_url": p.thumb_url,

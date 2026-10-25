@@ -1,7 +1,8 @@
 """Websocket API for a timeline card: `{"type": "ouderportaal/timeline"}`.
 
 Returns per child the days (newest first) with their moments, photos and messages. Photo URLs point at the saved
-copies under /media/local/...; a card signs them with `auth/sign_path` before using them in an <img>.
+copies under /api/ouderportaal/photos/..., which only admins may load, so other users get none; a card signs them with
+`auth/sign_path` before using them in an <img>.
 """
 
 from __future__ import annotations
@@ -41,14 +42,13 @@ def _message(coordinator: OuderportaalCoordinator, message: Message) -> dict[str
     }
 
 
-def _photo(coordinator: OuderportaalCoordinator, photo: Photo, saved: set[str]) -> dict[str, Any]:
+def _photo(coordinator: OuderportaalCoordinator, photo: Photo, saved: set[str], is_admin: bool) -> dict[str, Any]:
     return {
         "id": photo.id,
         "description": photo.description,
         "media_type": photo.media_type,
         "saved": photo.id in saved,
-        "url": coordinator.archive.media_url(photo),
-        "media_content_id": coordinator.archive.media_content_id(photo),
+        "url": coordinator.archive.url(photo) if is_admin else None,
     }
 
 
@@ -82,7 +82,9 @@ async def ws_timeline(hass: HomeAssistant, connection: websocket_api.ActiveConne
                     day(moment.day.isoformat())["moments"].append(_moment(moment))
             for photo in photos:
                 if child.id in photo.child_ids:
-                    day(photo.day.isoformat())["photos"].append(_photo(coordinator, photo, saved))
+                    day(photo.day.isoformat())["photos"].append(
+                        _photo(coordinator, photo, saved, connection.user.is_admin)
+                    )
             # Messages without children are for the whole family, so they show for every child.
             for message in history.messages:
                 if (not message.child_ids or child.id in message.child_ids) and message.day >= since:

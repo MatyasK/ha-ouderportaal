@@ -6,16 +6,8 @@ from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import OuderportaalCoordinator
-from .timeline import Moment, Photo
-
-
-def child_unique_id(coordinator: OuderportaalCoordinator, child_id: str) -> str:
-    """The child in this account, so two parents can each add theirs for the same child: '<entry id>_<child id>'.
-
-    The base of the child's device identifier and entity unique ids.
-    """
-    return f"{coordinator.config_entry.entry_id}_{child_id}"
+from .coordinator import OuderportaalCoordinator, child_unique_id
+from .timeline import Moment
 
 
 def child_device_info(coordinator: OuderportaalCoordinator, child_id: str) -> DeviceInfo:
@@ -43,8 +35,3 @@ class OuderportaalEntity(CoordinatorEntity[OuderportaalCoordinator]):
     def moments(self) -> list[Moment]:
         """This child's moments, oldest first."""
         return [m for m in self.coordinator.data.moments if m.child_id == self.child_id]
-
-    @property
-    def photos(self) -> list[Photo]:
-        """This child's photos, newest first."""
-        return [p for p in self.coordinator.data.photos if self.child_id in p.child_ids]

@@ -44,7 +44,7 @@ SCHEDULE_PAST_DAYS: Final = 31
 SCHEDULE_FUTURE_DAYS: Final = 92
 SCHEDULE_REQUEST_DAYS: Final = 31
 
-# Photos are saved under <media>/ouderportaal/<date>/.
+# Photos are saved under <config>/ouderportaal/<date>/.
 ARCHIVE_DIR: Final = "ouderportaal"
 MAX_PARALLEL_DOWNLOADS: Final = 3
 

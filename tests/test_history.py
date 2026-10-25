@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import logging
 import re
 from collections.abc import Iterable
 from datetime import date, datetime, timedelta
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
@@ -14,7 +16,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Event, HomeAssistant
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_capture_events,
@@ -48,7 +50,7 @@ def _day_cards(cards: list[dict[str, Any]], day: date) -> list[dict[str, Any]]:
 
 
 @pytest.fixture
-async def entry(hass: HomeAssistant, freezer, media_dir, photo_cdn) -> MockConfigEntry:
+async def entry(hass: HomeAssistant, freezer, archive_dir, photo_cdn) -> MockConfigEntry:
     freezer.move_to(NOW)
     await hass.config.async_set_time_zone("Europe/Amsterdam")
     entry = MockConfigEntry(
@@ -109,14 +111,36 @@ async def test_imports_last_30_days_once_without_announcing(hass: HomeAssistant,
 
 
 @pytest.mark.usefixtures("history_pages")
-async def test_photos_are_saved_in_the_media_folder(hass: HomeAssistant, entry, mock_client, media_dir) -> None:
+async def test_photos_are_saved_in_a_private_folder(hass: HomeAssistant, entry, mock_client, archive_dir) -> None:
     await _setup(hass, entry)
 
-    saved = sorted(p.relative_to(media_dir).as_posix() for p in media_dir.rglob("*") if p.is_file())
+    saved = sorted(p.relative_to(archive_dir).as_posix() for p in archive_dir.rglob("*") if p.is_file())
     assert len(saved) == 12
     assert "2026-10-07/photo3.jpeg" in saved
     assert "2026-09-08/photo1-2026-09-08.jpeg" in saved
-    assert (media_dir / "2026-10-07" / "photo3.jpeg").read_bytes() == PHOTO_BYTES
+    assert (archive_dir / "2026-10-07" / "photo3.jpeg").read_bytes() == PHOTO_BYTES
+    # Not in the media folder, where every Home Assistant user could browse them.
+    assert not Path(hass.config.media_dirs["local"]).exists()
+
+
+async def test_saved_photos_are_served_to_admins_only(
+    hass: HomeAssistant, entry, mock_client, hass_client, hass_read_only_access_token
+) -> None:
+    await _setup(hass, entry)
+    url = "/api/ouderportaal/photos/2026-10-07/photo3.jpeg"
+
+    admin = await hass_client()
+    resp = await admin.get(url)
+    assert resp.status == 200
+    assert await resp.read() == PHOTO_BYTES
+    assert resp.content_type == "image/jpeg"
+    assert (await admin.get("/api/ouderportaal/photos/2026-10-07/unknown.jpeg")).status == 404
+    # Only a date and a plain file name match: nothing outside the archive.
+    assert (await admin.get("/api/ouderportaal/photos/2026-10-07/sub/photo3.jpeg")).status == 404
+    assert (await admin.get("/api/ouderportaal/photos/..%2F..%2Fsecrets.yaml")).status in (400, 404)
+
+    user = await hass_client(hass_read_only_access_token)
+    assert (await user.get(url)).status == 401
 
 
 async def test_failed_import_is_retried_after_restart(hass: HomeAssistant, entry, mock_client, timeline_cards) -> None:
@@ -138,11 +162,11 @@ async def test_failed_import_is_retried_after_restart(hass: HomeAssistant, entry
     assert "2026-10-01" in {m.day.isoformat() for m in entry.runtime_data.history.moments}
 
 
-async def test_unwritable_media_folder_only_stops_saving_photos(
-    hass: HomeAssistant, entry, mock_client, media_dir, caplog
+async def test_unwritable_archive_folder_only_stops_saving_photos(
+    hass: HomeAssistant, entry, mock_client, archive_dir, caplog
 ) -> None:
-    # The photos' folder is taken by a file, like a media folder Home Assistant cannot write to.
-    media_dir.write_text("not a folder")
+    # The photos' folder is taken by a file, like a folder Home Assistant cannot write to.
+    archive_dir.write_text("not a folder")
     caplog.set_level(logging.INFO)
 
     await _setup(hass, entry)
@@ -155,10 +179,10 @@ async def test_unwritable_media_folder_only_stops_saving_photos(
     # Warned once, not on every poll.
     assert caplog.text.count("Could not save photos") == 1
 
-    media_dir.unlink()
+    archive_dir.unlink()
     await _refresh(hass, entry)
 
-    assert (media_dir / "2026-10-07" / "photo3.jpeg").read_bytes() == PHOTO_BYTES
+    assert (archive_dir / "2026-10-07" / "photo3.jpeg").read_bytes() == PHOTO_BYTES
     assert "Saving photos works again" in caplog.text
 
 
@@ -202,19 +226,19 @@ async def test_history_is_saved_shortly_after_a_change(
 
 
 async def test_expired_photo_url_is_retried_on_next_poll(
-    hass: HomeAssistant, entry, photo_cdn, media_dir, mock_client
+    hass: HomeAssistant, entry, photo_cdn, archive_dir, mock_client
 ) -> None:
     photo_cdn.clear_requests()
     photo_cdn.get(IMG_3, status=403)
     photo_cdn.get(re.compile(r"^https://resource\.kidskonnect\.cloud/"), content=PHOTO_BYTES)
     await _setup(hass, entry)
-    assert not (media_dir / "2026-10-07" / "photo3.jpeg").exists()
+    assert not (archive_dir / "2026-10-07" / "photo3.jpeg").exists()
 
     photo_cdn.clear_requests()
     photo_cdn.get(re.compile(r"^https://resource\.kidskonnect\.cloud/"), content=PHOTO_BYTES)
     await _refresh(hass, entry)
 
-    assert (media_dir / "2026-10-07" / "photo3.jpeg").read_bytes() == PHOTO_BYTES
+    assert (archive_dir / "2026-10-07" / "photo3.jpeg").read_bytes() == PHOTO_BYTES
 
 
 async def test_latest_photo_is_served_from_saved_copy(
@@ -230,28 +254,48 @@ async def test_latest_photo_is_served_from_saved_copy(
     assert await resp.read() == PHOTO_BYTES
     assert resp.content_type == "image/jpeg"
     assert photo_cdn.call_count == requests_before
-    state = hass.states.get("image.sam_latest_photo")
-    assert state.attributes["media_url"] == "/media/local/ouderportaal/2026-10-07/photo3.jpeg"
+    # No link to the saved copy: every user who may see the entity sees its attributes.
+    assert "media_url" not in hass.states.get("image.sam_latest_photo").attributes
 
 
-async def test_new_photos_event_points_at_saved_copy(
-    hass: HomeAssistant, entry, mock_client, timeline_cards, media_dir
+async def test_new_photos_event_points_at_latest_photo_image(
+    hass: HomeAssistant, entry, mock_client, timeline_cards, photo_cdn, hass_client
 ) -> None:
-    events = async_capture_events(hass, EVENT_NEW_ENTRY)
     await _setup(hass, entry)
-
+    client = await hass_client()
+    img_4 = "https://resource.kidskonnect.cloud/test/IMG-4.jpeg"
+    photo_cdn.clear_requests()
+    photo_cdn.get(img_4, content=b"photo 4")
+    photo_cdn.get(re.compile(r"^https://resource\.kidskonnect\.cloud/"), content=PHOTO_BYTES)
     cards = copy.deepcopy(timeline_cards)
-    cards[1]["photos"].insert(0, cards[1]["photos"][0] | {"id": "photo4"})
+    cards[1]["photos"].insert(0, cards[1]["photos"][0] | {"id": "photo4", "fullSizeUrl": img_4})
     mock_client.offsets[0] = cards
+    # The poll goes on with the Messages page after the event; a notification loads the image meanwhile.
+    loaded = asyncio.Event()
+    get_messages = mock_client.get_messages.return_value
+
+    async def messages_after_load(*args: Any) -> Any:
+        await loaded.wait()
+        return get_messages
+
+    mock_client.get_messages.side_effect = messages_after_load
+    events: list[Event] = []
+    images: list[bytes] = []
+
+    async def notify(event: Event) -> None:
+        events.append(event)
+        images.append(await (await client.get(event.data["media_url"])).read())
+        loaded.set()
+
+    hass.bus.async_listen(EVENT_NEW_ENTRY, notify)
     await _refresh(hass, entry)
 
     (event,) = events
-    assert event.data["media_url"] == "/media/local/ouderportaal/2026-10-07/photo4.jpeg"
-    assert event.data["photos"][0]["media_content_id"] == (
-        "media-source://media_source/local/ouderportaal/2026-10-07/photo4.jpeg"
-    )
-    # Saved before the event fired, so a notification can load it straight away.
-    assert (media_dir / "2026-10-07" / "photo4.jpeg").exists()
+    assert event.data["media_url"] == "/api/image_proxy/image.sam_latest_photo"
+    assert event.data["media_content_id"] == "media-source://image/image.sam_latest_photo"
+    assert images == [b"photo 4"]
+    assert event.data["photos"][0]["media_url"] == "/api/ouderportaal/photos/2026-10-07/photo4.jpeg"
+    assert "media_content_id" not in event.data["photos"][0]
 
 
 @pytest.mark.usefixtures("history_pages")
@@ -289,9 +333,24 @@ async def test_websocket_returns_days_newest_first(hass: HomeAssistant, entry, m
         "description": "In this photo is Sam",
         "media_type": "photo",
         "saved": True,
-        "url": "/media/local/ouderportaal/2026-10-07/photo3.jpeg",
-        "media_content_id": "media-source://media_source/local/ouderportaal/2026-10-07/photo3.jpeg",
+        "url": "/api/ouderportaal/photos/2026-10-07/photo3.jpeg",
     }
+
+
+async def test_websocket_gives_photo_urls_to_admins_only(
+    hass: HomeAssistant, entry, mock_client, hass_ws_client, hass_read_only_access_token
+) -> None:
+    await _setup(hass, entry)
+    ws = await hass_ws_client(hass, hass_read_only_access_token)
+
+    await ws.send_json({"id": 1, "type": "ouderportaal/timeline", "days": 1})
+    photos = (await ws.receive_json())["result"]["children"][0]["days"][0]["photos"]
+
+    assert [(p["id"], p["saved"], p["url"]) for p in photos] == [
+        ("photo3", True, None),
+        ("photo2", True, None),
+        ("photo1", True, None),
+    ]
 
 
 @pytest.mark.usefixtures("history_pages")
