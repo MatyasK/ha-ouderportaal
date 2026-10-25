@@ -68,7 +68,9 @@ class Child:
 
 
 def child_unique_id(coordinator: OuderportaalCoordinator, child_id: str) -> str:
-    """The child in this account, so two parents can each add theirs for the same child: '<entry id>_<child id>'.
+    """The child in this account: '<entry id>_<child id>'.
+
+    Scoped to the account because installs from before the one-account-per-portal rule may have both parents' accounts.
 
     The base of the child's device identifier and entity unique ids.
     """

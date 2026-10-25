@@ -119,8 +119,14 @@ The first time the integration runs it only records what is already there, so yo
 
 If the password changes, Home Assistant asks you to log in again.
 
-Both parents can add their own account, also for the same child.
-Each account gets its own devices; the second one's entity ids end in `_2`.
+Add one account per portal.
+One parent's account usually shows all your children, so the second parent does not need to add theirs.
+What the integration reads follows that account's rights on the portal, such as the Agenda and Messages.
+If the other parent's account sees more, remove this account and add that one instead.
+
+Did you add both parents' accounts with an older version?
+That keeps working: the second account's entity ids end in `_2`.
+You can remove one of the two accounts; the other keeps its own history and devices.
 
 ## Notification examples
 

@@ -111,6 +111,34 @@ async def test_same_account_twice_aborts(hass: HomeAssistant, mock_client) -> No
     assert result["reason"] == "already_configured"
 
 
+async def test_second_account_on_the_same_portal_aborts(hass: HomeAssistant, mock_client) -> None:
+    MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="mijnopvang:other@example.com",
+        data={CONF_PORTAL: "mijnopvang", CONF_USERNAME: "other@example.com", CONF_PASSWORD: "secret"},
+    ).add_to_hass(hass)
+    result = await _start(hass)
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "portal_already_configured"
+    mock_client.login.assert_not_called()
+
+
+async def test_other_portal_can_be_added(hass: HomeAssistant, mock_client) -> None:
+    MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="anderopvang:parent@example.com",
+        data={CONF_PORTAL: "anderopvang", CONF_USERNAME: "parent@example.com", CONF_PASSWORD: "secret"},
+    ).add_to_hass(hass)
+    result = await _start(hass)
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+
+
 async def test_reauth_updates_password(hass: HomeAssistant, mock_client) -> None:
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -128,5 +156,22 @@ async def test_reauth_updates_password(hass: HomeAssistant, mock_client) -> None
     mock_client.login.side_effect = None
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {CONF_PASSWORD: "new"})
     assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert entry.data[CONF_PASSWORD] == "new"
+
+
+async def test_existing_second_account_can_log_in_again(hass: HomeAssistant, mock_client) -> None:
+    """Installs from before the one-account-per-portal rule may have both parents' accounts."""
+    for username in ("parent@example.com", "other@example.com"):
+        MockConfigEntry(
+            domain=DOMAIN,
+            unique_id=f"mijnopvang:{username}",
+            data={CONF_PORTAL: "mijnopvang", CONF_USERNAME: username, CONF_PASSWORD: "old"},
+        ).add_to_hass(hass)
+    entry = hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, "mijnopvang:other@example.com")
+    result = await entry.start_reauth_flow(hass)
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {CONF_PASSWORD: "new"})
+
     assert result["reason"] == "reauth_successful"
     assert entry.data[CONF_PASSWORD] == "new"

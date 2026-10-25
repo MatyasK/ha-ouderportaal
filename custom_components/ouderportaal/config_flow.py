@@ -74,6 +74,9 @@ class OuderportaalConfigFlow(ConfigFlow, domain=DOMAIN):
                 username = user_input[CONF_USERNAME].strip()
                 await self.async_set_unique_id(f"{portal}:{username.lower()}")
                 self._abort_if_unique_id_configured()
+                # One parent's account usually shows every child, so a second account would only duplicate it.
+                if any(e.data[CONF_PORTAL] == portal for e in self._async_current_entries(include_ignore=False)):
+                    return self.async_abort(reason="portal_already_configured")
                 errors = await self._validate(portal, username, user_input[CONF_PASSWORD])
                 if not errors:
                     return self.async_create_entry(
