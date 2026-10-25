@@ -30,6 +30,7 @@
     },
     "abort": {
       "already_configured": "This account is already set up.",
+      "portal_already_configured": "This portal is already set up. One account is enough: it shows all your children.",
       "reauth_successful": "Logged in again."
     }
   },
