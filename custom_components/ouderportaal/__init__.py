@@ -48,7 +48,7 @@ async def async_migrate_entry(hass: HomeAssistant, entry: OuderportaalConfigEntr
 
 
 async def _scope_ids_to_the_account(hass: HomeAssistant, entry: OuderportaalConfigEntry) -> None:
-    """Minor version 2: a child's device and entities are per account, so both parents can add theirs.
+    """Minor version 2: a child's device and entities are per account, back when both parents could add theirs.
 
     They keep their entity ids, names and areas.
     """

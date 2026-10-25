@@ -208,7 +208,8 @@ async def test_unusable_card_does_not_stop_the_update(hass: HomeAssistant, entry
     assert hass.states.get("sensor.sam_milk_today").state == "270.0"
 
 
-async def test_two_accounts_for_the_same_child(hass: HomeAssistant, entry, mock_client, device_registry) -> None:
+async def test_existing_second_account_keeps_working(hass: HomeAssistant, entry, mock_client, device_registry) -> None:
+    """Setup no longer allows a second account on a portal, but installs from before that may have both parents'."""
     other = MockConfigEntry(
         domain=DOMAIN,
         unique_id="mijnopvang:other-parent@example.com",

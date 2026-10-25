@@ -30,7 +30,7 @@
     },
     "abort": {
       "already_configured": "Dit account is al ingesteld.",
-      "portal_already_configured": "Dit portaal is al ingesteld. Eén account is genoeg: daarin staan al je kinderen.",
+      "portal_already_configured": "Dit portaal is al ingesteld. Gebruik het account van één ouder; ziet een ander account meer, verwijder dan dit account en voeg dat andere toe.",
       "reauth_successful": "Opnieuw ingelogd."
     }
   },

@@ -158,3 +158,20 @@ async def test_reauth_updates_password(hass: HomeAssistant, mock_client) -> None
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reauth_successful"
     assert entry.data[CONF_PASSWORD] == "new"
+
+
+async def test_existing_second_account_can_log_in_again(hass: HomeAssistant, mock_client) -> None:
+    """Installs from before the one-account-per-portal rule may have both parents' accounts."""
+    for username in ("parent@example.com", "other@example.com"):
+        MockConfigEntry(
+            domain=DOMAIN,
+            unique_id=f"mijnopvang:{username}",
+            data={CONF_PORTAL: "mijnopvang", CONF_USERNAME: username, CONF_PASSWORD: "old"},
+        ).add_to_hass(hass)
+    entry = hass.config_entries.async_entry_for_domain_unique_id(DOMAIN, "mijnopvang:other@example.com")
+    result = await entry.start_reauth_flow(hass)
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {CONF_PASSWORD: "new"})
+
+    assert result["reason"] == "reauth_successful"
+    assert entry.data[CONF_PASSWORD] == "new"
