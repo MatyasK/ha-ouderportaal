@@ -136,4 +136,5 @@ class PhotoView(HomeAssistantView):
         path = archive_root(hass) / day / name
         if not await hass.async_add_executor_job(path.is_file):
             raise web.HTTPNotFound
-        return web.FileResponse(path, headers={"Cache-Control": "private, max-age=31536000, immutable"})
+        # Checked with the server on every use, so a browser shared with a non-admin does not show it from its cache.
+        return web.FileResponse(path, headers={"Cache-Control": "private, no-cache"})

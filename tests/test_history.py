@@ -134,6 +134,8 @@ async def test_saved_photos_are_served_to_admins_only(
     assert resp.status == 200
     assert await resp.read() == PHOTO_BYTES
     assert resp.content_type == "image/jpeg"
+    # A browser asks again before showing it from its cache, so a later non-admin login there cannot see it.
+    assert resp.headers["Cache-Control"] == "private, no-cache"
     assert (await admin.get("/api/ouderportaal/photos/2026-10-07/unknown.jpeg")).status == 404
     # Only a date and a plain file name match: nothing outside the archive.
     assert (await admin.get("/api/ouderportaal/photos/2026-10-07/sub/photo3.jpeg")).status == 404

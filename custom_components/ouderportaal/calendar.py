@@ -10,8 +10,13 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from .coordinator import OuderportaalConfigEntry, OuderportaalCoordinator, ScheduleCoordinator
-from .entity import OuderportaalEntity, child_device_info, child_unique_id
+from .coordinator import (
+    OuderportaalConfigEntry,
+    OuderportaalCoordinator,
+    ScheduleCoordinator,
+    child_entity_unique_id,
+)
+from .entity import OuderportaalEntity, child_device_info
 from .schedule import Session
 from .timeline import Moment
 
@@ -106,7 +111,7 @@ class ScheduleCalendar(CoordinatorEntity[ScheduleCoordinator], CalendarEntity):
         assert coordinator.schedule is not None
         super().__init__(coordinator.schedule)
         self.child_id = child_id
-        self._attr_unique_id = f"{child_unique_id(coordinator, child_id)}_schedule"
+        self._attr_unique_id = child_entity_unique_id(coordinator, child_id, "schedule")
         self._attr_device_info = child_device_info(coordinator, child_id)
 
     @property

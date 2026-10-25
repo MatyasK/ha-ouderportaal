@@ -6,7 +6,7 @@ from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN
-from .coordinator import OuderportaalCoordinator, child_unique_id
+from .coordinator import OuderportaalCoordinator, child_entity_unique_id, child_unique_id
 from .timeline import Moment
 
 
@@ -27,7 +27,7 @@ class OuderportaalEntity(CoordinatorEntity[OuderportaalCoordinator]):
     def __init__(self, coordinator: OuderportaalCoordinator, child_id: str, key: str) -> None:
         super().__init__(coordinator)
         self.child_id = child_id
-        self._attr_unique_id = f"{child_unique_id(coordinator, child_id)}_{key}"
+        self._attr_unique_id = child_entity_unique_id(coordinator, child_id, key)
         self._attr_translation_key = key
         self._attr_device_info = child_device_info(coordinator, child_id)
 

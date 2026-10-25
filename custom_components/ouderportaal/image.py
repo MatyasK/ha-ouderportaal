@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util import dt as dt_util
 
+from .const import LATEST_PHOTO_KEY
 from .coordinator import OuderportaalConfigEntry, OuderportaalCoordinator
 from .entity import OuderportaalEntity
 from .timeline import Photo
@@ -28,7 +29,7 @@ class OuderportaalLatestPhoto(OuderportaalEntity, ImageEntity):
     """The newest photo, served from the saved copy to every Home Assistant user who may see the entity."""
 
     def __init__(self, hass: HomeAssistant, coordinator: OuderportaalCoordinator, child_id: str) -> None:
-        OuderportaalEntity.__init__(self, coordinator, child_id, "latest_photo")
+        OuderportaalEntity.__init__(self, coordinator, child_id, LATEST_PHOTO_KEY)
         ImageEntity.__init__(self, hass)
         self._photo: Photo | None = None
         self._update_photo()

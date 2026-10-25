@@ -33,6 +33,7 @@ from .const import (
     DOMAIN,
     EVENT_NEW_ENTRY,
     HISTORY_SAVE_DELAY_S,
+    LATEST_PHOTO_KEY,
     MESSAGES_POLL_DAYS,
     NIGHT_UPDATE_INTERVAL,
     SCHEDULE_FUTURE_DAYS,
@@ -72,6 +73,10 @@ def child_unique_id(coordinator: OuderportaalCoordinator, child_id: str) -> str:
     The base of the child's device identifier and entity unique ids.
     """
     return f"{coordinator.config_entry.entry_id}_{child_id}"
+
+
+def child_entity_unique_id(coordinator: OuderportaalCoordinator, child_id: str, key: str) -> str:
+    return f"{child_unique_id(coordinator, child_id)}_{key}"
 
 
 def update_interval_for(now: datetime) -> timedelta:
@@ -392,7 +397,7 @@ class OuderportaalCoordinator(DataUpdateCoordinator[Timeline]):
         """One event per batch, so an upload of 20 photos is one notification."""
         # The latest photo is shown to every Home Assistant user by the image entity; older ones only to admins.
         image = er.async_get(self.hass).async_get_entity_id(
-            "image", DOMAIN, f"{child_unique_id(self, child_id)}_latest_photo"
+            "image", DOMAIN, child_entity_unique_id(self, child_id, LATEST_PHOTO_KEY)
         )
         self.hass.bus.async_fire(
             EVENT_NEW_ENTRY,
