@@ -111,11 +111,18 @@ The first time the integration runs it only records what is already there, so yo
 
 ## Install
 
-1. In HACS, add `https://github.com/MatyasK/ha-ouderportaal` as a custom repository (type: Integration) and install it.
-   Or copy `custom_components/ouderportaal` into your Home Assistant `config/custom_components` folder.
+[![Open your Home Assistant instance and open this repository in HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=MatyasK&repository=ha-ouderportaal&category=integration)
+
+1. In HACS, search for "Ouderportaal" and download it, or use the button above.
 2. Restart Home Assistant.
-3. Go to Settings > Devices & services > Add integration > Ouderportaal.
+3. Go to Settings > Devices & services > Add integration > Ouderportaal, or use the button below.
 4. Enter your portal name (e.g. `mijnopvang`, or paste the website address), email address and password.
+
+[![Open your Home Assistant instance and start setting up Ouderportaal.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=ouderportaal)
+
+Not finding it in HACS?
+Add `https://github.com/MatyasK/ha-ouderportaal` as a custom repository (type: Integration) and download it from there.
+Without HACS, copy `custom_components/ouderportaal` into your Home Assistant `config/custom_components` folder.
 
 If the password changes, Home Assistant asks you to log in again.
 
